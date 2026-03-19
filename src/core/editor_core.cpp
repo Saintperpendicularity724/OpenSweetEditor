@@ -208,7 +208,10 @@ namespace NS_SWEETEDITOR {
         // Reset gesture handler state so skipped TOUCH_MOVE events during handle drag
         // do not leave m_is_tap_ as true and affect later double-tap detection
         m_gesture_handler_->resetState();
-        m_text_layout_->setViewState(m_view_state_);
+        // Snap scroll to integer pixels for crisp text when idle
+        m_view_state_.scroll_x = std::round(m_view_state_.scroll_x);
+        m_view_state_.scroll_y = std::round(m_view_state_.scroll_y);
+        normalizeScrollState();
         fillGestureResult(gesture_result);
         return gesture_result;
       }
@@ -292,6 +295,13 @@ namespace NS_SWEETEDITOR {
     }
     default:
       break;
+    }
+
+    // Snap scroll to integer pixels for crisp text when pointer is released
+    if (event.type == EventType::TOUCH_UP || event.type == EventType::MOUSE_UP
+        || event.type == EventType::TOUCH_CANCEL) {
+      m_view_state_.scroll_x = std::round(m_view_state_.scroll_x);
+      m_view_state_.scroll_y = std::round(m_view_state_.scroll_y);
     }
 
     normalizeScrollState();

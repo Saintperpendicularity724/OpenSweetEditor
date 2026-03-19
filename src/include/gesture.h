@@ -179,6 +179,7 @@ namespace NS_SWEETEDITOR {
     bool m_is_dragging_ {false};
     bool m_is_scaling_ {false};
     bool m_is_fast_scrolling_ {false};
+    bool m_is_scrolling_ {false};
     int m_pinch_confirm_count_ {0};
     Vector<PointF> m_last_multi_points_;
     PointF m_last_tap_point_;

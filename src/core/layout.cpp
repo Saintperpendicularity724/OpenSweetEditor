@@ -125,8 +125,7 @@ namespace NS_SWEETEDITOR {
         float abs_y = visual_line.line_number_position.y;
         float screen_y = abs_y - scroll_y;
         // Text draw y should be baseline (line top + top_padding + font_ascent)
-        // Align to integer pixels to avoid subpixel jitter
-        float baseline_y = std::round(screen_y + top_padding + m_layout_metrics_.font_ascent);
+        float baseline_y = screen_y + top_padding + m_layout_metrics_.font_ascent;
         visual_line.line_number_position.y = baseline_y;
         for (VisualRun& run : visual_line.runs) {
           run.y = baseline_y;
@@ -744,10 +743,6 @@ namespace NS_SWEETEDITOR {
     ScrollBounds bounds = getScrollBounds();
     scroll_y = std::clamp(scroll_y, 0.0f, bounds.max_scroll_y);
     scroll_x = std::clamp(scroll_x, 0.0f, bounds.max_scroll_x);
-
-    // Align to integer pixels to avoid subpixel text jitter while scrolling
-    scroll_x = std::round(scroll_x);
-    scroll_y = std::round(scroll_y);
   }
 
   void TextLayout::resetMeasurer() {

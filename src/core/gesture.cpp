@@ -40,6 +40,7 @@ namespace NS_SWEETEDITOR {
     m_is_dragging_ = false;
     m_is_scaling_ = false;
     m_is_fast_scrolling_ = false;
+    m_is_scrolling_ = false;
     m_pinch_confirm_count_ = 0;
     m_last_multi_points_.clear();
     m_down_points_.clear();
@@ -146,6 +147,7 @@ namespace NS_SWEETEDITOR {
       m_last_move_point_ = m_down_points_[0];
       m_is_tap_ = true;
       m_is_dragging_ = false;
+      m_is_scrolling_ = false;
       break;
     }
 
@@ -177,6 +179,7 @@ namespace NS_SWEETEDITOR {
       m_is_tap_ = false;
       m_is_scaling_ = false;
       m_is_fast_scrolling_ = false;
+      m_is_scrolling_ = false;
       m_pinch_confirm_count_ = 0;
       m_last_distance_ = 0;
       break;
@@ -186,14 +189,20 @@ namespace NS_SWEETEDITOR {
     case EventType::TOUCH_MOVE: {
       if (m_down_points_.size() == 1) {
         const PointF& curr_point = event.points[0];
-        if (curr_point.distance(m_last_move_point_) > m_config_.touch_slop || m_is_dragging_) {
+        if (curr_point.distance(m_last_move_point_) > m_config_.touch_slop || m_is_dragging_ || m_is_scrolling_) {
           m_is_tap_ = false;
           // If already in long-press state, later moves are drag-select
           if (m_is_dragging_) {
             m_last_move_point_ = curr_point;
             return {GestureType::DRAG_SELECT, curr_point};
           }
-          // Normal scroll
+          // First frame crossing slop: absorb the accumulated delta
+          if (!m_is_scrolling_) {
+            m_is_scrolling_ = true;
+            m_last_move_point_ = curr_point;
+            return {GestureType::SCROLL, {}, 1, 0, 0};
+          }
+          // Subsequent frames: use real delta
           float scroll_x = curr_point.x - m_last_move_point_.x;
           float scroll_y = curr_point.y - m_last_move_point_.y;
           m_last_move_point_ = curr_point;
