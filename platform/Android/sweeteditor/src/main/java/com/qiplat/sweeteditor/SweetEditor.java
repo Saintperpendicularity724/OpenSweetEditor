@@ -4,12 +4,8 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.graphics.Canvas;
-import android.graphics.DashPathEffect;
-import android.graphics.Paint;
-import android.graphics.Path;
 import android.graphics.PointF;
 import android.graphics.Typeface;
-import android.graphics.drawable.Drawable;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.AttributeSet;
@@ -33,6 +29,7 @@ import com.qiplat.sweeteditor.core.EditorOptions;
 import com.qiplat.sweeteditor.core.HandleConfig;
 import com.qiplat.sweeteditor.core.EditorCore;
 import com.qiplat.sweeteditor.core.ScrollbarConfig;
+import com.qiplat.sweeteditor.renderer.EditorRenderer;
 import com.qiplat.sweeteditor.core.adornment.DiagnosticItem;
 import com.qiplat.sweeteditor.core.adornment.FoldRegion;
 
@@ -56,7 +53,6 @@ import com.qiplat.sweeteditor.core.foundation.WrapMode;
 import com.qiplat.sweeteditor.core.snippet.LinkedEditingModel;
 import com.qiplat.sweeteditor.perf.MeasurePerfStats;
 import com.qiplat.sweeteditor.perf.PerfOverlay;
-import com.qiplat.sweeteditor.perf.PerfStepRecorder;
 import com.qiplat.sweeteditor.core.visual.*;
 import com.qiplat.sweeteditor.completion.CompletionItem;
 import com.qiplat.sweeteditor.completion.CompletionItemViewFactory;
@@ -98,32 +94,14 @@ import java.util.List;
 public class SweetEditor extends View {
     private static final String TAG = SweetEditor.class.getSimpleName();
     private static final boolean ENABLE_PERF_LOG = true;
-    private static final int PERF_LOG_INTERVAL = 60; // Print perf log every 60 frames to avoid Log I/O affecting frame time
+    private static final int PERF_LOG_INTERVAL = 60;
 
-    // Performance stats tools
-    private final MeasurePerfStats mMeasurePerfStats = new MeasurePerfStats();
-    private final PerfOverlay mPerfOverlay = new PerfOverlay();
+    private EditorRenderer mRenderer;
     private int mPerfLogFrameCount = 0;
 
-    // RenderModel cache: skip buildRenderModel for pure visual changes like cursor blink
     @Nullable
     private EditorRenderModel mCachedModel;
     private boolean mModelDirty = true;
-
-    /**
-     * Editor icon provider interface.
-     * Platform implementation provides icon Drawables for gutter icons and InlayHint ICON types.
-     */
-    public interface EditorIconProvider {
-        /**
-         * Get the Drawable for a given icon ID.
-         *
-         * @param iconId icon ID (passed from setLineGutterIcons / InlayHint.iconId)
-         * @return icon Drawable, returns null if not drawn
-         */
-        @Nullable
-        Drawable getIconDrawable(int iconId);
-    }
 
     // ==================== Construction/Init/Lifecycle ====================
 
@@ -131,7 +109,6 @@ public class SweetEditor extends View {
     private EditorSettings mSettings;
     private TextMeasurer mTextMeasurer;
     private Document mDocument;
-    private EditorIconProvider mEditorIconProvider;
     private final EditorEventBus mEventBus = new EditorEventBus();
     private DecorationProviderManager mDecorationProviderManager;
     private CompletionProviderManager mCompletionProviderManager;
@@ -145,36 +122,6 @@ public class SweetEditor extends View {
      * Current theme (default dark).
      */
     private EditorTheme mTheme = EditorTheme.dark();
-
-    // Paints for drawing
-    private Paint mBackgroundPaint;
-    private Paint mTextPaint;
-    private Paint mInlayHintPaint;
-    private Paint mInlayHintBgPaint;
-    // Pre-cached Typeface (avoid Typeface.create on every draw)
-    private final Typeface[] mTextTypefaces = new Typeface[4];
-    private final Typeface[] mInlayHintTypefaces = new Typeface[4];
-    // Reuse FontMetrics objects, avoid allocation per frame
-    private final Paint.FontMetrics mInlayHintFontMetrics = new Paint.FontMetrics();
-    private final Paint.FontMetrics mTextFontMetrics = new Paint.FontMetrics();
-    private Paint mCursorPaint;
-    private Paint mSelectionPaint;
-    private Paint mLineNumberPaint;
-    private Paint mCurrentLinePaint;
-    private Paint mGuidePaint;
-    private Paint mSeparatorLinePaint;
-    private Paint mCompositionPaint;
-    private Paint mSplitLinePaint;
-    private Paint mHandlePaint;
-    private Paint mFoldArrowPaint;
-    private Paint mDiagnosticPaint;
-    private DashPathEffect mDiagnosticDashEffect;
-    private Paint mLinkedEditingActivePaint;
-    private Paint mLinkedEditingInactivePaint;
-    private Paint mBracketHighlightBorderPaint;
-    private Paint mBracketHighlightBgPaint;
-    private Paint mScrollbarTrackPaint;
-    private Paint mScrollbarThumbPaint;
     private static final int TRANSIENT_SCROLLBAR_REFRESH_MIN_MS = 16;
 
     // Cursor blink
@@ -268,7 +215,7 @@ public class SweetEditor extends View {
             if (ms >= PerfOverlay.WARN_INPUT_MS) {
                 Log.w(TAG, String.format("[PERF][SLOW] onTouchEvent: %.2f ms", ms));
             }
-            mPerfOverlay.recordInput("touch", ms);
+            mRenderer.getPerfOverlay().recordInput("touch", ms);
         }
         return true;
     }
@@ -293,107 +240,49 @@ public class SweetEditor extends View {
 
     @Override
     protected void onDraw(@NonNull Canvas canvas) {
-        PerfStepRecorder drawPerf = ENABLE_PERF_LOG ? PerfStepRecorder.start() : null;
+        float buildMs = 0f;
 
-        // Only rebuild when model is dirty (pure visual changes like cursor blink reuse cache)
         if (mModelDirty) {
-            mMeasurePerfStats.reset();
-            if (ENABLE_PERF_LOG) mTextMeasurer.setPerfStats(mMeasurePerfStats);
+            long t0 = ENABLE_PERF_LOG ? System.nanoTime() : 0;
+            MeasurePerfStats measStats = mRenderer.getMeasurePerfStats();
+            measStats.reset();
+            if (ENABLE_PERF_LOG) mTextMeasurer.setPerfStats(measStats);
             mCachedModel = mEditorCore.buildRenderModel();
             if (ENABLE_PERF_LOG) mTextMeasurer.setPerfStats(null);
             mModelDirty = false;
+            if (ENABLE_PERF_LOG) buildMs = (System.nanoTime() - t0) / 1_000_000f;
         }
         EditorRenderModel model = mCachedModel;
-        if (drawPerf != null) drawPerf.mark(PerfStepRecorder.STEP_BUILD);
 
         if (model == null) {
             canvas.drawColor(mTheme.backgroundColor);
             return;
         }
-        // Background
-        canvas.drawColor(mTheme.backgroundColor);
-        if (drawPerf != null) drawPerf.mark(PerfStepRecorder.STEP_CLEAR);
-        // Current line highlight
-        if (model.currentLine != null) {
-            float lineHeight = model.cursor != null ? model.cursor.height : 20;
-            canvas.drawRect(0, model.currentLine.y,
-                    getWidth(), model.currentLine.y + lineHeight,
-                    mCurrentLinePaint);
-        }
-        if (drawPerf != null) drawPerf.mark(PerfStepRecorder.STEP_CURRENT);
-        // Selection highlight
-        drawSelectionRects(canvas, model.selectionRects);
-        if (drawPerf != null) drawPerf.mark(PerfStepRecorder.STEP_SELECTION);
-        // Draw text lines (run.x may be negative, overflow to line number area)
-        drawLines(canvas, model);
-        if (drawPerf != null) drawPerf.mark(PerfStepRecorder.STEP_LINES);
-        // Code structure lines
-        drawGuideSegments(canvas, model.guideSegments);
-        if (drawPerf != null) drawPerf.mark(PerfStepRecorder.STEP_GUIDES);
-        // Composition input underline
-        drawCompositionDecoration(canvas, model.compositionDecoration);
-        if (drawPerf != null) drawPerf.mark(PerfStepRecorder.STEP_COMPOSITION);
-        // Diagnostic decorations (wavy/dashed lines)
-        drawDiagnosticDecorations(canvas, model.diagnosticDecorations);
-        if (drawPerf != null) drawPerf.mark(PerfStepRecorder.STEP_DIAGNOSTICS);
-        // Linked editing highlight (tab stop borders)
-        drawLinkedEditingRects(canvas, model.linkedEditingRects);
-        if (drawPerf != null) drawPerf.mark(PerfStepRecorder.STEP_LINKED);
-        // Bracket pair highlight
-        drawBracketHighlightRects(canvas, model.bracketHighlightRects);
-        if (drawPerf != null) drawPerf.mark(PerfStepRecorder.STEP_BRACKET);
-        // Cursor
-        drawCursor(canvas, model.cursor);
-        if (drawPerf != null) drawPerf.mark(PerfStepRecorder.STEP_CURSOR);
-        // Cover overflow text/decoration lines/cursor with gutter background, then draw line numbers and split line
-        if (model.splitX > 0) {
-            canvas.drawRect(0, 0, model.splitX, getHeight(), mBackgroundPaint);
-            if (model.currentLine != null) {
-                float lineHeight = model.cursor != null ? model.cursor.height : 20;
-                canvas.drawRect(0, model.currentLine.y,
-                        model.splitX, model.currentLine.y + lineHeight,
-                        mCurrentLinePaint);
-            }
-            canvas.drawLine(model.splitX, 0, model.splitX, getHeight(), mSplitLinePaint);
-        }
-        // Draw line number text
-        drawLineNumbers(canvas, model);
-        if (drawPerf != null) drawPerf.mark(PerfStepRecorder.STEP_GUTTER);
-        // Selection handles (drag handles)
-        drawSelectionHandles(canvas, model.selectionStartHandle, model.selectionEndHandle);
-        drawScrollbars(canvas, model);
-        if (drawPerf != null) {
-            drawPerf.mark(PerfStepRecorder.STEP_HANDLES);
-            drawPerf.finish(); // Lock end time immediately to avoid subsequent log/overlay code affecting stats
-        }
 
-        // Completion panel cursor follow
+        boolean needsTransientRefresh = mRenderer.render(canvas, model, getWidth(), getHeight(),
+                mCursorVisible, buildMs);
+
         if (mCompletionPopupController != null && model.cursor != null && model.cursor.position != null) {
             mCompletionPopupController.updateCursorPosition(
                     model.cursor.position.x, model.cursor.position.y, model.cursor.height);
         }
 
-        // Perf log + debug overlay
-        if (drawPerf != null) {
-            float buildMs = drawPerf.getStepMs(PerfStepRecorder.STEP_BUILD);
-            float totalMs = drawPerf.getTotalMs();
-            float drawMs = totalMs - buildMs;
+        if (needsTransientRefresh) {
+            scheduleTransientScrollbarRefresh(TRANSIENT_SCROLLBAR_REFRESH_MIN_MS);
+        } else {
+            mHandler.removeCallbacks(mTransientScrollbarRefresh);
+        }
 
-            // Log when exceeding threshold (sampled: every PERF_LOG_INTERVAL frames to avoid Log I/O affecting frame time)
+        if (ENABLE_PERF_LOG) {
+            MeasurePerfStats measStats = mRenderer.getMeasurePerfStats();
             mPerfLogFrameCount++;
             if (mPerfLogFrameCount >= PERF_LOG_INTERVAL) {
                 mPerfLogFrameCount = 0;
-                if (totalMs >= PerfOverlay.WARN_PAINT_MS || drawPerf.anyStepOver(PerfOverlay.WARN_PAINT_STEP_MS)) {
-                    Log.w(TAG, "[PERF][Paint] " + drawPerf.buildSummary());
-                }
-                if (buildMs >= PerfOverlay.WARN_BUILD_MS || mMeasurePerfStats.shouldLog()) {
+                if (buildMs >= PerfOverlay.WARN_BUILD_MS || measStats.shouldLog()) {
                     Log.w(TAG, "[PERF][Build] build=" + String.format("%.2fms", buildMs)
-                            + " | " + mMeasurePerfStats.buildSummary());
+                            + " | " + measStats.buildSummary());
                 }
             }
-
-            mPerfOverlay.recordFrame(buildMs, drawMs, totalMs, drawPerf, mMeasurePerfStats);
-            mPerfOverlay.draw(canvas, getWidth());
         }
     }
 
@@ -450,24 +339,19 @@ public class SweetEditor extends View {
         return mSettings;
     }
 
-    /** Sync platform-side text measurement and paint sizes to the latest scale. */
     void syncPlatformScale(float scale) {
-        mTextMeasurer.setScale(scale);
-        mInlayHintPaint.setTextSize(mTextPaint.getTextSize() * 0.9f);
-        mLineNumberPaint.setTextSize(mTextPaint.getTextSize() * 0.85f);
+        mRenderer.syncPlatformScale(scale);
         mEditorCore.resetMeasurer();
     }
 
     void applyTypeface(Typeface typeface) {
-        mTextMeasurer.setTypeface(typeface);
+        mRenderer.applyTypeface(typeface);
         mEditorCore.resetMeasurer();
         flush();
     }
 
     void applyTextSize(float textSize) {
-        mTextMeasurer.setTextSize(textSize);
-        mInlayHintPaint.setTextSize(textSize * 0.9f);
-        mLineNumberPaint.setTextSize(textSize * 0.85f);
+        mRenderer.applyTextSize(textSize);
         mEditorCore.resetMeasurer();
         flush();
     }
@@ -488,28 +372,8 @@ public class SweetEditor extends View {
      */
     public void applyTheme(EditorTheme theme) {
         mTheme = theme;
+        mRenderer.applyTheme(theme);
 
-        // Update colors for all Paint objects
-        if (mBackgroundPaint != null) mBackgroundPaint.setColor(theme.backgroundColor);
-        if (mTextPaint != null) mTextPaint.setColor(theme.textColor);
-        if (mInlayHintPaint != null) mInlayHintPaint.setColor(theme.inlayHintTextColor);
-        if (mInlayHintBgPaint != null) mInlayHintBgPaint.setColor(theme.inlayHintBgColor);
-        if (mCursorPaint != null) mCursorPaint.setColor(theme.cursorColor);
-        if (mSelectionPaint != null) mSelectionPaint.setColor(theme.selectionColor);
-        if (mLineNumberPaint != null) mLineNumberPaint.setColor(theme.lineNumberColor);
-        if (mCurrentLinePaint != null) mCurrentLinePaint.setColor(theme.currentLineColor);
-        if (mGuidePaint != null) mGuidePaint.setColor(theme.guideColor);
-        if (mSeparatorLinePaint != null) mSeparatorLinePaint.setColor(theme.separatorLineColor);
-        if (mCompositionPaint != null) mCompositionPaint.setColor(theme.compositionUnderlineColor);
-        if (mSplitLinePaint != null) mSplitLinePaint.setColor(theme.splitLineColor);
-        if (mHandlePaint != null) mHandlePaint.setColor(theme.cursorColor);
-        if (mFoldArrowPaint != null) mFoldArrowPaint.setColor(theme.lineNumberColor);
-        if (mLinkedEditingActivePaint != null) mLinkedEditingActivePaint.setColor(theme.linkedEditingActiveColor);
-        if (mLinkedEditingInactivePaint != null) mLinkedEditingInactivePaint.setColor(theme.linkedEditingInactiveColor);
-        if (mBracketHighlightBorderPaint != null) mBracketHighlightBorderPaint.setColor(theme.bracketHighlightBorderColor);
-        if (mBracketHighlightBgPaint != null) mBracketHighlightBgPaint.setColor(theme.bracketHighlightBgColor);
-
-        // Re-register syntax highlight styles from theme to C++ core
         for (Map.Entry<Integer, int[]> entry : theme.syntaxStyles.entrySet()) {
             int[] style = entry.getValue();
             mEditorCore.registerStyle(entry.getKey(), style[0], style[1]);
@@ -1011,7 +875,7 @@ public class SweetEditor extends View {
 
     /**
      * Set gutter icons for a specified line (replaces entire line).
-     * <p>Icon Drawables are provided by {@link EditorIconProvider}.
+     * <p>Icon Drawables are provided by {@link EditorRenderer.EditorIconProvider}.
      *
      * @param line  Line number (0-based)
      * @param icons Icon list
@@ -1330,8 +1194,8 @@ public class SweetEditor extends View {
      *
      * @param provider Icon provider, pass null to remove
      */
-    public void setEditorIconProvider(@Nullable EditorIconProvider provider) {
-        mEditorIconProvider = provider;
+    public void setEditorIconProvider(@Nullable EditorRenderer.EditorIconProvider provider) {
+        mRenderer.setEditorIconProvider(provider);
     }
 
     // ==================== Extension Provider API ====================
@@ -1459,7 +1323,7 @@ public class SweetEditor extends View {
      * @param enabled true=enable, false=disable (default off)
      */
     public void setPerfOverlayEnabled(boolean enabled) {
-        mPerfOverlay.setEnabled(enabled);
+        mRenderer.setPerfOverlayEnabled(enabled);
         postInvalidate();
     }
 
@@ -1469,7 +1333,7 @@ public class SweetEditor extends View {
      * @return {@code true} if performance overlay is currently enabled
      */
     public boolean isPerfOverlayEnabled() {
-        return mPerfOverlay.isEnabled();
+        return mRenderer.isPerfOverlayEnabled();
     }
 
     // ==================== IME Internal Methods (package-private) ====================
@@ -1731,7 +1595,7 @@ public class SweetEditor extends View {
         if (ms >= PerfOverlay.WARN_INPUT_MS) {
             Log.w(TAG, String.format("[PERF][SLOW] %s: %.2f ms", tag, ms));
         }
-        mPerfOverlay.recordInput(tag, ms);
+        mRenderer.getPerfOverlay().recordInput(tag, ms);
     }
 
     private boolean handleCtrlShortcut(KeyEvent event) {
@@ -1770,136 +1634,15 @@ public class SweetEditor extends View {
     // ==================== Private Helper / Internal Implementation ====================
 
     private void initView(Context context) {
-        // Text Paint
-        mTextPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        mTextPaint.setColor(mTheme.textColor);
-        mTextPaint.setTextSize(36);
-
-        // Pre-cache text Typeface (MONOSPACE as base font)
-        mTextTypefaces[Typeface.NORMAL] = Typeface.create(Typeface.MONOSPACE, Typeface.NORMAL);
-        mTextTypefaces[Typeface.BOLD] = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD);
-        mTextTypefaces[Typeface.ITALIC] = Typeface.create(Typeface.MONOSPACE, Typeface.ITALIC);
-        mTextTypefaces[Typeface.BOLD_ITALIC] = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD_ITALIC);
-        mTextPaint.setTypeface(mTextTypefaces[Typeface.NORMAL]);
-
-        // InlayHint dedicated Paint (uses same font config as TextMeasurer)
-        mInlayHintPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        mInlayHintTypefaces[Typeface.NORMAL] = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL);
-        mInlayHintTypefaces[Typeface.BOLD] = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD);
-        mInlayHintTypefaces[Typeface.ITALIC] = Typeface.create(Typeface.SANS_SERIF, Typeface.ITALIC);
-        mInlayHintTypefaces[Typeface.BOLD_ITALIC] = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD_ITALIC);
-        mInlayHintPaint.setTypeface(mInlayHintTypefaces[Typeface.NORMAL]);
-        mInlayHintPaint.setTextSize(36 * 0.9f);
-        mInlayHintPaint.setColor(mTheme.inlayHintTextColor);
-
-        // InlayHint background Paint
-        mInlayHintBgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        mInlayHintBgPaint.setStyle(Paint.Style.FILL);
-        mInlayHintBgPaint.setColor(mTheme.inlayHintBgColor);
-
-        // Background Paint
-        mBackgroundPaint = new Paint();
-        mBackgroundPaint.setColor(mTheme.backgroundColor);
-
-        // Cursor Paint
-        mCursorPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        mCursorPaint.setColor(mTheme.cursorColor);
-        mCursorPaint.setStrokeWidth(2f);
-
-        // Selection Paint
-        mSelectionPaint = new Paint();
-        mSelectionPaint.setColor(mTheme.selectionColor);
-        mSelectionPaint.setStyle(Paint.Style.FILL);
-
-        // Line number Paint
-        mLineNumberPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        mLineNumberPaint.setColor(mTheme.lineNumberColor);
-        mLineNumberPaint.setTextSize(30);
-
-        // Current line Paint
-        mCurrentLinePaint = new Paint();
-        mCurrentLinePaint.setColor(mTheme.currentLineColor);
-        mCurrentLinePaint.setStyle(Paint.Style.FILL);
-
-        // Structure line Paint (indent/bracket/flow)
-        mGuidePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        mGuidePaint.setStyle(Paint.Style.STROKE);
-        mGuidePaint.setColor(mTheme.guideColor);
-        mGuidePaint.setStrokeWidth(1f);
-
-        // Separator line Paint (separator uses solid line)
-        mSeparatorLinePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        mSeparatorLinePaint.setColor(mTheme.separatorLineColor);
-        mSeparatorLinePaint.setStrokeWidth(1f);
-
-        // Composition input underline Paint
-        mCompositionPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        mCompositionPaint.setColor(mTheme.compositionUnderlineColor);
-        mCompositionPaint.setStrokeWidth(2f);
-        mCompositionPaint.setStyle(Paint.Style.STROKE);
-
-        // Diagnostic decoration Paint (wavy/dashed line)
-        mDiagnosticPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        mDiagnosticPaint.setStyle(Paint.Style.STROKE);
-        mDiagnosticPaint.setStrokeWidth(3.0f);
-        mDiagnosticDashEffect = new DashPathEffect(new float[]{3, 2}, 0);
-
-        // Linked editing highlight Paint (active tab stop: semi-transparent background + border; inactive: border only)
-        mLinkedEditingActivePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        mLinkedEditingActivePaint.setColor(mTheme.linkedEditingActiveColor);
-        mLinkedEditingActivePaint.setStyle(Paint.Style.STROKE);
-        mLinkedEditingActivePaint.setStrokeWidth(2f);
-
-        mLinkedEditingInactivePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        mLinkedEditingInactivePaint.setColor(mTheme.linkedEditingInactiveColor);
-        mLinkedEditingInactivePaint.setStyle(Paint.Style.STROKE);
-        mLinkedEditingInactivePaint.setStrokeWidth(1f);
-
-        // Bracket match highlight Paint (golden border + semi-transparent background)
-        mBracketHighlightBorderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        mBracketHighlightBorderPaint.setColor(mTheme.bracketHighlightBorderColor);
-        mBracketHighlightBorderPaint.setStyle(Paint.Style.STROKE);
-        mBracketHighlightBorderPaint.setStrokeWidth(1.5f);
-
-        mBracketHighlightBgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        mBracketHighlightBgPaint.setColor(mTheme.bracketHighlightBgColor);
-        mBracketHighlightBgPaint.setStyle(Paint.Style.FILL);
-
-        // Scrollbar Paint
-        mScrollbarTrackPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        mScrollbarTrackPaint.setStyle(Paint.Style.FILL);
-        mScrollbarThumbPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        mScrollbarThumbPaint.setStyle(Paint.Style.FILL);
-
-        // Line number split line Paint
-        mSplitLinePaint = new Paint();
-        mSplitLinePaint.setColor(mTheme.splitLineColor);
-        mSplitLinePaint.setStrokeWidth(1f);
-
-        // Selection cursor Paint (water drop shaped drag handle)
-        mHandlePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        mHandlePaint.setColor(mTheme.cursorColor);
-        mHandlePaint.setStyle(Paint.Style.FILL);
-
-        // Fold arrow Paint (VSCode style chevron, two-line stroke)
-        mFoldArrowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        mFoldArrowPaint.setColor(mTheme.lineNumberColor);
-        mFoldArrowPaint.setStyle(Paint.Style.STROKE);
-        mFoldArrowPaint.setStrokeCap(Paint.Cap.ROUND);
-        mFoldArrowPaint.setStrokeJoin(Paint.Join.ROUND);
-
-        // Create TextMeasurer and EditorCore (pass same Paint instance to ensure measurement and drawing consistency)
-        mTextMeasurer = new TextMeasurer(mTextPaint, mInlayHintPaint);
-
-        int scaledTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
-        EditorOptions editorOptions = new EditorOptions(scaledTouchSlop, 300);
-        mEditorCore = new EditorCore(mTextMeasurer, editorOptions);
-        mEditorCore.setHandleConfig(new HandleConfig());
         float density = getResources().getDisplayMetrics().density;
+        mRenderer = new EditorRenderer(mTheme, density);
+
+        mRenderer.setHandleConfig(new HandleConfig());
+
         float scrollbarThicknessPx = 12.0f * density;
         float scrollbarMinThumbPx = 48.0f * density;
         float scrollbarThumbHitPaddingPx = 16.0f * density;
-        mEditorCore.setScrollbarConfig(new ScrollbarConfig(
+        mRenderer.setScrollbarConfig(new ScrollbarConfig(
                 scrollbarThicknessPx,
                 scrollbarMinThumbPx,
                 scrollbarThumbHitPaddingPx,
@@ -1908,15 +1651,22 @@ public class SweetEditor extends View {
                 ScrollbarConfig.ScrollbarTrackTapMode.DISABLED,
                 700,
                 300));
+
+        mTextMeasurer = mRenderer.getTextMeasurer();
+
+        int scaledTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
+        EditorOptions editorOptions = new EditorOptions(scaledTouchSlop, 300);
+        mEditorCore = new EditorCore(mTextMeasurer, editorOptions);
+        mEditorCore.setHandleConfig(mRenderer.getHandleConfig());
+        mEditorCore.setScrollbarConfig(mRenderer.getScrollbarConfig());
+
         mDecorationProviderManager = new DecorationProviderManager(this);
 
-        // Completion manager and panel controller
         mCompletionProviderManager = new CompletionProviderManager(this);
         mCompletionPopupController = new CompletionPopupController(context, this);
         mCompletionProviderManager.setListener(mCompletionPopupController);
         mCompletionPopupController.setConfirmListener(this::applyCompletionItem);
 
-        // Register syntax highlight styles from default theme
         for (Map.Entry<Integer, int[]> entry : mTheme.syntaxStyles.entrySet()) {
             int[] style = entry.getValue();
             mEditorCore.registerStyle(entry.getKey(), style[0], style[1]);
@@ -1944,322 +1694,8 @@ public class SweetEditor extends View {
         postInvalidate();
     }
 
-    private void drawLines(Canvas canvas, EditorRenderModel model) {
-        if (model.lines == null) return;
-        for (VisualLine line : model.lines) {
-            // Draw each VisualRun
-            if (line.runs == null) continue;
-            int lastFontStyle = -1;
-            int lastColor = 0;
-            for (VisualRun run : line.runs) {
-                if (run.type == VisualRunType.TEXT || run.type == VisualRunType.WHITESPACE
-                        || run.type == VisualRunType.INLAY_HINT || run.type == VisualRunType.PHANTOM_TEXT
-                        || run.type == VisualRunType.FOLD_PLACEHOLDER) {
-                    // FoldPlaceholder: semi-transparent rounded background + " … " text (uses main text Paint)
-                    if (run.type == VisualRunType.FOLD_PLACEHOLDER) {
-                        if (run.text != null && !run.text.isEmpty()) {
-                            float mgn = run.margin;
-                            mTextPaint.getFontMetrics(mTextFontMetrics);
-                            float bgTop = run.y + mTextFontMetrics.ascent;
-                            float bgBottom = run.y + mTextFontMetrics.descent;
-                            float bgLeft = run.x + mgn;
-                            float bgRight = run.x + run.width - mgn;
-                            float radius = (bgBottom - bgTop) * 0.2f;
-                            mInlayHintBgPaint.setColor(mTheme.foldPlaceholderBgColor);
-                            canvas.drawRoundRect(bgLeft, bgTop, bgRight, bgBottom, radius, radius, mInlayHintBgPaint);
-                            mInlayHintBgPaint.setColor(mTheme.inlayHintBgColor);
-                            mTextPaint.setColor(mTheme.foldPlaceholderTextColor);
-                            canvas.drawText(run.text, run.x + mgn + run.padding, run.y, mTextPaint);
-                            mTextPaint.setColor(mTheme.textColor);
-                        }
-                        lastFontStyle = -1;
-                        continue;
-                    }
-
-                    // InlayHint uses dedicated Paint (font/size consistent with measurement), style synced from run.style
-                    if (run.type == VisualRunType.INLAY_HINT) {
-                        float mgn = run.margin;
-                        mInlayHintPaint.getFontMetrics(mInlayHintFontMetrics);
-                        float bgTop = run.y + mInlayHintFontMetrics.ascent;
-                        float bgBottom = run.y + mInlayHintFontMetrics.descent;
-                        float bgLeft = run.x + mgn;
-                        float bgRight = run.x + run.width - mgn;
-
-                        if (run.colorValue != 0) {
-                            // COLOR type: solid color block, no background, no padding, square rectangle
-                            float blockSize = bgBottom - bgTop;
-                            float colorLeft = run.x + mgn;
-                            float colorTop = bgTop;
-                            mInlayHintBgPaint.setColor(run.colorValue);
-                            mInlayHintBgPaint.setAlpha(255);
-                            canvas.drawRect(colorLeft, colorTop,
-                                    colorLeft + blockSize, colorTop + blockSize,
-                                    mInlayHintBgPaint);
-                            // Restore to inlayHint background color to avoid affecting subsequent TEXT/ICON type drawing
-                            mInlayHintBgPaint.setColor(mTheme.inlayHintBgColor);
-                        } else {
-                            // TEXT / ICON type: rounded background + content
-                            float radius = (bgBottom - bgTop) * 0.2f;
-                            canvas.drawRoundRect(bgLeft, bgTop, bgRight, bgBottom, radius, radius, mInlayHintBgPaint);
-
-                            if (run.iconId > 0 && mEditorIconProvider != null) {
-                                float bgW = bgRight - bgLeft;
-                                float bgH = bgBottom - bgTop;
-                                float iconSize = Math.min(bgW, bgH);
-                                float iconLeft = bgLeft + (bgW - iconSize) * 0.5f;
-                                float iconTop = bgTop + (bgH - iconSize) * 0.5f;
-                                Drawable drawable = mEditorIconProvider.getIconDrawable(run.iconId);
-                                if (drawable != null) {
-                                    drawable.setColorFilter(mTheme.inlayHintIconColor, android.graphics.PorterDuff.Mode.SRC_IN);
-                                    drawable.setBounds((int) iconLeft, (int) iconTop,
-                                            (int) (iconLeft + iconSize), (int) (iconTop + iconSize));
-                                    drawable.draw(canvas);
-                                    drawable.clearColorFilter();
-                                }
-                            } else if (run.text != null && !run.text.isEmpty()) {
-                                // Text type inlay hint
-                                int fontStyle = run.style != null ? run.style.fontStyle : 0;
-                                // Use custom color from run.style if available (replace alpha with theme inlayHint text alpha), otherwise use theme config
-                                int color;
-                                if (run.style != null && run.style.color != 0) {
-                                    int alpha = (mTheme.inlayHintTextColor >>> 24) & 0xFF;
-                                    color = (alpha << 24) | (run.style.color & 0x00FFFFFF);
-                                } else {
-                                    color = mTheme.inlayHintTextColor;
-                                }
-                                boolean bold = (fontStyle & FontStyle.BOLD) != 0;
-                                boolean italic = (fontStyle & FontStyle.ITALIC) != 0;
-                                int tfStyle = Typeface.NORMAL;
-                                if (bold && italic) tfStyle = Typeface.BOLD_ITALIC;
-                                else if (bold) tfStyle = Typeface.BOLD;
-                                else if (italic) tfStyle = Typeface.ITALIC;
-                                mInlayHintPaint.setTypeface(mInlayHintTypefaces[tfStyle]);
-                                mInlayHintPaint.setStrikeThruText((fontStyle & FontStyle.STRIKETHROUGH) != 0);
-                                mInlayHintPaint.setColor(color);
-                                canvas.drawText(run.text, run.x + mgn + run.padding, run.y, mInlayHintPaint);
-                            }
-                        }
-                        lastFontStyle = -1;
-                        continue;
-                    }
-
-                    if (run.text == null || run.text.isEmpty()) continue;
-
-                    int fontStyle = run.style != null ? run.style.fontStyle : 0;
-                    int color = (run.style != null && run.style.color != 0) ? run.style.color : mTheme.textColor;
-
-                    // Only update Paint when style or color changes
-                    if (fontStyle != lastFontStyle) {
-                        applyFontStyle(fontStyle);
-                        lastFontStyle = fontStyle;
-                    }
-                    if (color != lastColor) {
-                        mTextPaint.setColor(color);
-                        lastColor = color;
-                    }
-
-                    // Draw background color (semantic highlighting/search match, etc.)
-                    if (run.style != null && run.style.backgroundColor != 0) {
-                        Paint.FontMetrics fm = mTextPaint.getFontMetrics();
-                        float bgTop = run.y + fm.ascent;
-                        float bgBottom = run.y + fm.descent;
-                        mTextPaint.setColor(run.style.backgroundColor);
-                        canvas.drawRect(run.x, bgTop, run.x + run.width, bgBottom, mTextPaint);
-                        mTextPaint.setColor(color);
-                    }
-
-                    // Phantom text uses independent color
-                    if (run.type == VisualRunType.PHANTOM_TEXT) {
-                        mTextPaint.setColor(mTheme.phantomTextColor);
-                        canvas.drawText(run.text, run.x, run.y, mTextPaint);
-                        mTextPaint.setColor(color);
-                        continue;
-                    }
-
-                    canvas.drawText(run.text, run.x, run.y, mTextPaint);
-                }
-            }
-        }
-    }
-
-    private void drawLineNumbers(Canvas canvas, EditorRenderModel model) {
-        if (model.lines == null) return;
-        boolean overlayMode = (model.maxGutterIcons == 0);
-        Path arrowPath = new Path();
-        for (VisualLine line : model.lines) {
-            if (line.wrapIndex == 0 && !line.isPhantomLine && line.lineNumberPosition != null) {
-                boolean hasIcons = mEditorIconProvider != null
-                        && line.gutterIconIds != null && !line.gutterIconIds.isEmpty();
-
-                if (overlayMode && hasIcons) {
-                    // Overlay mode: draw only 1 icon (first in list), size matching line number text, replacing line number text
-                    Paint.FontMetrics fm = mLineNumberPaint.getFontMetrics();
-                    float baseline = line.lineNumberPosition.y;
-                    float iconTop = baseline + fm.ascent;
-                    float iconSize = fm.descent - fm.ascent;
-                    float iconLeft = line.lineNumberPosition.x;
-                    int iconId = line.gutterIconIds.get(0);
-                    Drawable drawable = mEditorIconProvider.getIconDrawable(iconId);
-                    if (drawable != null) {
-                        drawable.setBounds((int) iconLeft, (int) iconTop,
-                                (int) (iconLeft + iconSize), (int) (iconTop + iconSize));
-                        drawable.draw(canvas);
-                    }
-                } else {
-                    // Draw line number text
-                    String lineNumStr = String.valueOf(line.logicalLine + 1);
-                    canvas.drawText(lineNumStr,
-                            line.lineNumberPosition.x, line.lineNumberPosition.y,
-                            mLineNumberPaint);
-
-                    // Icons are placed close to the fold arrow area on the left, arranged from right to left
-                    if (hasIcons) {
-                        float lineHeight = model.cursor != null ? model.cursor.height : mLineNumberPaint.getTextSize();
-                        float iconSize = lineHeight;
-                        Paint.FontMetrics fm = mLineNumberPaint.getFontMetrics();
-                        float baseline = line.lineNumberPosition.y;
-                        float iconTop = baseline + fm.ascent;
-                        float iconRight = model.foldArrowX > 0
-                                ? model.foldArrowX - lineHeight * 0.5f
-                                : model.splitX - 2f;
-                        int maxIcons = Math.min(line.gutterIconIds.size(), model.maxGutterIcons);
-                        for (int i = maxIcons - 1; i >= 0; i--) {
-                            int iconId = line.gutterIconIds.get(i);
-                            Drawable drawable = mEditorIconProvider.getIconDrawable(iconId);
-                            if (drawable != null) {
-                                int left = (int) (iconRight - iconSize);
-                                int top = (int) iconTop;
-                                int right = (int) iconRight;
-                                int bottom = (int) (iconTop + iconSize);
-                                drawable.setBounds(left, top, right, bottom);
-                                drawable.draw(canvas);
-                                iconRight -= iconSize;
-                            }
-                        }
-                    }
-                }
-
-                // Draw fold/expand arrow (VSCode style chevron)
-                if (line.foldState != null && line.foldState != FoldState.NONE) {
-                    Paint.FontMetrics fm = mLineNumberPaint.getFontMetrics();
-                    float baseline = line.lineNumberPosition.y;
-                    float lineTop = baseline + fm.ascent;
-                    float lineHeight = fm.descent - fm.ascent;
-                    float halfSize = lineHeight * 0.2f;
-                    float centerX = model.foldArrowX > 0 ? model.foldArrowX : model.splitX - lineHeight * 0.5f;
-                    float centerY = lineTop + lineHeight * 0.5f;
-                    mFoldArrowPaint.setStrokeWidth(lineHeight * 0.1f);
-
-                    arrowPath.reset();
-                    if (line.foldState == FoldState.COLLAPSED) {
-                        // > Right chevron (collapsed)
-                        arrowPath.moveTo(centerX - halfSize * 0.5f, centerY - halfSize);
-                        arrowPath.lineTo(centerX + halfSize * 0.5f, centerY);
-                        arrowPath.lineTo(centerX - halfSize * 0.5f, centerY + halfSize);
-                    } else {
-                        // v Down chevron (expanded)
-                        arrowPath.moveTo(centerX - halfSize, centerY - halfSize * 0.5f);
-                        arrowPath.lineTo(centerX, centerY + halfSize * 0.5f);
-                        arrowPath.lineTo(centerX + halfSize, centerY - halfSize * 0.5f);
-                    }
-                    canvas.drawPath(arrowPath, mFoldArrowPaint);
-                }
-            }
-        }
-    }
-
-    private void drawScrollbars(Canvas canvas, EditorRenderModel model) {
-        ScrollbarModel vertical = model.verticalScrollbar;
-        ScrollbarModel horizontal = model.horizontalScrollbar;
-        float verticalAlpha = getScrollbarAlpha(vertical);
-        float horizontalAlpha = getScrollbarAlpha(horizontal);
-        boolean hasVertical = isDrawableScrollbar(vertical, verticalAlpha);
-        boolean hasHorizontal = isDrawableScrollbar(horizontal, horizontalAlpha);
-        if (!hasVertical && !hasHorizontal) {
-            mHandler.removeCallbacks(mTransientScrollbarRefresh);
-            return;
-        }
-
-        float verticalTrackX = 0f;
-        float verticalTrackWidth = 0f;
-        float horizontalTrackY = 0f;
-        float horizontalTrackHeight = 0f;
-
-        if (hasVertical) {
-            mScrollbarTrackPaint.setColor(multiplyAlpha(mTheme.scrollbarTrackColor, verticalAlpha));
-            mScrollbarThumbPaint.setColor(multiplyAlpha(mTheme.scrollbarThumbColor, verticalAlpha));
-            float trackX = vertical.track.origin != null ? vertical.track.origin.x : 0f;
-            float trackY = vertical.track.origin != null ? vertical.track.origin.y : 0f;
-            float thumbX = vertical.thumb.origin != null ? vertical.thumb.origin.x : 0f;
-            float thumbY = vertical.thumb.origin != null ? vertical.thumb.origin.y : 0f;
-            verticalTrackX = trackX;
-            verticalTrackWidth = vertical.track.width;
-            canvas.drawRect(trackX, trackY, trackX + vertical.track.width, trackY + vertical.track.height, mScrollbarTrackPaint);
-            canvas.drawRect(thumbX, thumbY, thumbX + vertical.thumb.width, thumbY + vertical.thumb.height, mScrollbarThumbPaint);
-        }
-
-        if (hasHorizontal) {
-            mScrollbarTrackPaint.setColor(multiplyAlpha(mTheme.scrollbarTrackColor, horizontalAlpha));
-            mScrollbarThumbPaint.setColor(multiplyAlpha(mTheme.scrollbarThumbColor, horizontalAlpha));
-            float trackX = horizontal.track.origin != null ? horizontal.track.origin.x : 0f;
-            float trackY = horizontal.track.origin != null ? horizontal.track.origin.y : 0f;
-            float thumbX = horizontal.thumb.origin != null ? horizontal.thumb.origin.x : 0f;
-            float thumbY = horizontal.thumb.origin != null ? horizontal.thumb.origin.y : 0f;
-            horizontalTrackY = trackY;
-            horizontalTrackHeight = horizontal.track.height;
-            canvas.drawRect(trackX, trackY, trackX + horizontal.track.width, trackY + horizontal.track.height, mScrollbarTrackPaint);
-            canvas.drawRect(thumbX, thumbY, thumbX + horizontal.thumb.width, thumbY + horizontal.thumb.height, mScrollbarThumbPaint);
-        }
-
-        if (hasVertical && hasHorizontal) {
-            mScrollbarTrackPaint.setColor(multiplyAlpha(mTheme.scrollbarTrackColor, Math.max(verticalAlpha, horizontalAlpha)));
-            canvas.drawRect(
-                    verticalTrackX,
-                    horizontalTrackY,
-                    verticalTrackX + verticalTrackWidth,
-                    horizontalTrackY + horizontalTrackHeight,
-                    mScrollbarTrackPaint);
-        }
-
-        ScrollbarConfig config = mEditorCore.getScrollbarConfig();
-        if (config != null && config.mode == ScrollbarConfig.ScrollbarMode.TRANSIENT) {
-            // Keep ticking while transient scrollbars are visible so fade-out always progresses.
-            scheduleTransientScrollbarRefresh(TRANSIENT_SCROLLBAR_REFRESH_MIN_MS);
-        } else {
-            mHandler.removeCallbacks(mTransientScrollbarRefresh);
-        }
-    }
-
-    private static boolean isDrawableScrollbar(@Nullable ScrollbarModel scrollbar, float alpha) {
-        return scrollbar != null
-                && scrollbar.visible
-                && alpha > 0f
-                && scrollbar.track != null
-                && scrollbar.thumb != null
-                && scrollbar.track.width > 0f
-                && scrollbar.track.height > 0f
-                && scrollbar.thumb.width > 0f
-                && scrollbar.thumb.height > 0f;
-    }
-
-    private static float getScrollbarAlpha(@Nullable ScrollbarModel scrollbar) {
-        if (scrollbar == null) return 0f;
-        return clamp01(scrollbar.alpha);
-    }
-
-    private static float clamp01(float value) {
-        return Math.max(0f, Math.min(1f, value));
-    }
-
-    private static int multiplyAlpha(int argb, float alphaMultiplier) {
-        float m = clamp01(alphaMultiplier);
-        int baseAlpha = (argb >>> 24) & 0xFF;
-        int outAlpha = Math.round(baseAlpha * m);
-        return (outAlpha << 24) | (argb & 0x00FFFFFF);
-    }
-
     private void scheduleTransientScrollbarRefresh(int requestedDelayMs) {
-        ScrollbarConfig config = mEditorCore.getScrollbarConfig();
+        ScrollbarConfig config = mRenderer.getScrollbarConfig();
         if (config == null || config.mode != ScrollbarConfig.ScrollbarMode.TRANSIENT) {
             mHandler.removeCallbacks(mTransientScrollbarRefresh);
             return;
@@ -2267,302 +1703,6 @@ public class SweetEditor extends View {
         int delayMs = Math.max(TRANSIENT_SCROLLBAR_REFRESH_MIN_MS, requestedDelayMs);
         mHandler.removeCallbacks(mTransientScrollbarRefresh);
         mHandler.postDelayed(mTransientScrollbarRefresh, delayMs);
-    }
-
-    private void drawCursor(Canvas canvas, @Nullable Cursor cursor) {
-        if (cursor == null || !cursor.visible || !mCursorVisible) return;
-        canvas.drawRect(
-                cursor.position.x,
-                cursor.position.y,
-                cursor.position.x + 2f,
-                cursor.position.y + cursor.height,
-                mCursorPaint
-        );
-    }
-
-    private void drawSelectionRects(Canvas canvas, @Nullable List<SelectionRect> rects) {
-        if (rects == null || rects.isEmpty()) return;
-        for (SelectionRect rect : rects) {
-            if (rect.origin == null) continue;
-            canvas.drawRect(
-                    rect.origin.x, rect.origin.y,
-                    rect.origin.x + rect.width,
-                    rect.origin.y + rect.height,
-                    mSelectionPaint
-            );
-        }
-    }
-
-    private void drawSelectionHandles(Canvas canvas,
-                                      @Nullable SelectionHandle startHandle,
-                                      @Nullable SelectionHandle endHandle) {
-        if (startHandle != null && startHandle.visible && startHandle.position != null) {
-            drawHandle(canvas, startHandle.position.x, startHandle.position.y,
-                    startHandle.height, true);
-        }
-        if (endHandle != null && endHandle.visible && endHandle.position != null) {
-            drawHandle(canvas, endHandle.position.x, endHandle.position.y,
-                    endHandle.height, false);
-        }
-    }
-
-    private void drawHandle(Canvas canvas, float x, float y, float height, boolean isStart) {
-        HandleConfig hc = mEditorCore.getHandleConfig();
-        float lineWidth = hc.lineWidth;
-        float dropRadius = hc.radius;
-        float dropLength = hc.centerDist;
-
-        // Vertical line
-        canvas.drawRect(x - lineWidth / 2, y, x + lineWidth / 2, y + height, mHandlePaint);
-
-        // Tip and circle center
-        float tipX = x;
-        float tipY, cx, cy;
-        if (isStart) {
-            tipY = y;
-            cx = x - dropRadius + lineWidth / 2;
-            cy = tipY - dropLength;
-        } else {
-            tipY = y + height;
-            cx = x + dropRadius - lineWidth / 2;
-            cy = tipY + dropLength;
-        }
-
-        // Bezier approximation coefficient for circle
-        float k = dropRadius * 0.5522f;
-        android.graphics.Path path = new android.graphics.Path();
-
-        if (!isStart) {
-            // End: tip at top (tipY), circle at bottom (cy > tipY)
-            float left = cx - dropRadius;
-            float right = cx + dropRadius;
-            float top = cy - dropRadius;
-            float bottom = cy + dropRadius;
-
-            path.moveTo(tipX, tipY);
-            // Right curve: tip → circle right (right, cy)
-            path.cubicTo(tipX, tipY + dropLength * 0.4f,
-                    right, cy - dropRadius * 0.8f,
-                    right, cy);
-            // Circle bottom-right: (right, cy) → (cx, bottom)
-            path.cubicTo(right, cy + k, cx + k, bottom, cx, bottom);
-            // Circle bottom-left: (cx, bottom) → (left, cy)
-            path.cubicTo(cx - k, bottom, left, cy + k, left, cy);
-            // Left curve: (left, cy) → tip
-            path.cubicTo(left, cy - dropRadius * 0.8f,
-                    tipX, tipY + dropLength * 0.4f,
-                    tipX, tipY);
-        } else {
-            // Start: tip at bottom (tipY), circle at top (cy < tipY)
-            float left = cx - dropRadius;
-            float right = cx + dropRadius;
-            float top = cy - dropRadius;
-            float bottom = cy + dropRadius;
-
-            path.moveTo(tipX, tipY);
-            // Left curve: tip → circle left (left, cy)
-            path.cubicTo(tipX, tipY - dropLength * 0.4f,
-                    left, cy + dropRadius * 0.8f,
-                    left, cy);
-            // Circle top-left: (left, cy) → (cx, top)
-            path.cubicTo(left, cy - k, cx - k, top, cx, top);
-            // Circle top-right: (cx, top) → (right, cy)
-            path.cubicTo(cx + k, top, right, cy - k, right, cy);
-            // Right curve: (right, cy) → tip
-            path.cubicTo(right, cy + dropRadius * 0.8f,
-                    tipX, tipY - dropLength * 0.4f,
-                    tipX, tipY);
-        }
-
-        path.close();
-        canvas.drawPath(path, mHandlePaint);
-    }
-
-    private void drawGuideSegments(Canvas canvas, @Nullable List<GuideSegment> segments) {
-        if (segments == null || segments.isEmpty()) return;
-        for (GuideSegment seg : segments) {
-            if (seg.start == null || seg.end == null) continue;
-            Paint paint = (seg.type == GuideType.SEPARATOR) ? mSeparatorLinePaint : mGuidePaint;
-            if (seg.style == GuideStyle.DOUBLE) {
-                float offset = 1.5f;
-                if (seg.direction == GuideDirection.HORIZONTAL) {
-                    canvas.drawLine(seg.start.x, seg.start.y - offset, seg.end.x, seg.end.y - offset, paint);
-                    canvas.drawLine(seg.start.x, seg.start.y + offset, seg.end.x, seg.end.y + offset, paint);
-                } else {
-                    canvas.drawLine(seg.start.x - offset, seg.start.y, seg.end.x - offset, seg.end.y, paint);
-                    canvas.drawLine(seg.start.x + offset, seg.start.y, seg.end.x + offset, seg.end.y, paint);
-                }
-            } else {
-                if (seg.arrowEnd) {
-                    float density = getResources().getDisplayMetrics().density;
-                    float arrowDepth = 8f * density * (float) Math.cos(Math.toRadians(28));
-                    float dx = seg.end.x - seg.start.x;
-                    float dy = seg.end.y - seg.start.y;
-                    float len = (float) Math.sqrt(dx * dx + dy * dy);
-                    if (len > arrowDepth) {
-                        float ratio = (len - arrowDepth) / len;
-                        float lineEndX = seg.start.x + dx * ratio;
-                        float lineEndY = seg.start.y + dy * ratio;
-                        canvas.drawLine(seg.start.x, seg.start.y, lineEndX, lineEndY, paint);
-                    }
-                    drawArrowHead(canvas, seg.start.x, seg.start.y, seg.end.x, seg.end.y, paint);
-                } else {
-                    canvas.drawLine(seg.start.x, seg.start.y, seg.end.x, seg.end.y, paint);
-                }
-            }
-        }
-    }
-
-    private void drawArrowHead(Canvas canvas, float fromX, float fromY, float toX, float toY, Paint paint) {
-        float density = getResources().getDisplayMetrics().density;
-        float arrowLen = 8f * density;
-        float arrowAngle = (float) Math.toRadians(28);
-        float dx = toX - fromX;
-        float dy = toY - fromY;
-        float len = (float) Math.sqrt(dx * dx + dy * dy);
-        if (len < 1f) return;
-        float ux = dx / len;
-        float uy = dy / len;
-        float cosA = (float) Math.cos(arrowAngle);
-        float sinA = (float) Math.sin(arrowAngle);
-        float ax1 = toX - arrowLen * (ux * cosA - uy * sinA);
-        float ay1 = toY - arrowLen * (uy * cosA + ux * sinA);
-        float ax2 = toX - arrowLen * (ux * cosA + uy * sinA);
-        float ay2 = toY - arrowLen * (uy * cosA - ux * sinA);
-        Path arrow = new Path();
-        arrow.moveTo(toX, toY);
-        arrow.lineTo(ax1, ay1);
-        arrow.lineTo(ax2, ay2);
-        arrow.close();
-        Paint.Style saved = paint.getStyle();
-        paint.setStyle(Paint.Style.FILL);
-        canvas.drawPath(arrow, paint);
-        paint.setStyle(saved);
-    }
-
-    private void drawCompositionDecoration(Canvas canvas, @Nullable CompositionDecoration decoration) {
-        if (decoration == null || !decoration.active) return;
-        if (decoration.origin == null) {
-            Log.w(TAG, "drawCompositionDecoration: active but origin is null");
-            return;
-        }
-        float y = decoration.origin.y + decoration.height;
-        Log.d(TAG, String.format("drawCompositionDecoration: origin=(%.1f, %.1f), w=%.1f, h=%.1f, drawY=%.1f",
-                decoration.origin.x, decoration.origin.y, decoration.width, decoration.height, y));
-        canvas.drawLine(decoration.origin.x, y,
-                decoration.origin.x + decoration.width, y,
-                mCompositionPaint);
-    }
-
-    private void drawDiagnosticDecorations(Canvas canvas, @Nullable List<DiagnosticDecoration> decorations) {
-        if (decorations == null || decorations.isEmpty()) return;
-
-        for (DiagnosticDecoration diag : decorations) {
-            if (diag.origin == null) continue;
-            int color;
-            if (diag.color != 0) {
-                color = diag.color;
-            } else {
-                switch (diag.severity) {
-                    case 0:
-                        color = mTheme.diagnosticErrorColor;
-                        break;
-                    case 1:
-                        color = mTheme.diagnosticWarningColor;
-                        break;
-                    case 2:
-                        color = mTheme.diagnosticInfoColor;
-                        break;
-                    default:
-                        color = mTheme.diagnosticHintColor;
-                        break;
-                }
-            }
-            mDiagnosticPaint.setColor(color);
-
-            float startX = diag.origin.x;
-            float endX = startX + diag.width;
-            float baseY = diag.origin.y + diag.height - 1.0f;
-
-            if (diag.severity == 3) {
-                // HINT: dashed straight line
-                mDiagnosticPaint.setPathEffect(mDiagnosticDashEffect);
-                canvas.drawLine(startX, baseY, endX, baseY, mDiagnosticPaint);
-                mDiagnosticPaint.setPathEffect(null);
-            } else {
-                // ERROR/WARNING/INFO: smooth curved wavy line
-                float halfWave = 7.0f;
-                float amplitude = 3.5f;
-                Path path = new Path();
-                path.moveTo(startX, baseY);
-                float x = startX;
-                int step = 0;
-                while (x < endX) {
-                    float nextX = Math.min(x + halfWave, endX);
-                    float midX = (x + nextX) / 2;
-                    float peakY = (step % 2 == 0) ? baseY - amplitude : baseY + amplitude;
-                    path.quadTo(midX, peakY, nextX, baseY);
-                    x = nextX;
-                    step++;
-                }
-                canvas.drawPath(path, mDiagnosticPaint);
-            }
-        }
-    }
-
-    private void drawLinkedEditingRects(Canvas canvas, @Nullable List<LinkedEditingRect> rects) {
-        if (rects == null || rects.isEmpty()) return;
-        for (LinkedEditingRect rect : rects) {
-            if (rect.origin == null) continue;
-            Paint paint = rect.isActive ? mLinkedEditingActivePaint : mLinkedEditingInactivePaint;
-            // Active tab stop draws extra semi-transparent background
-            if (rect.isActive) {
-                int color = mTheme.linkedEditingActiveColor;
-                int bgColor = (color & 0x00FFFFFF) | 0x20000000; // 12% opacity
-                Paint bgPaint = new Paint();
-                bgPaint.setColor(bgColor);
-                bgPaint.setStyle(Paint.Style.FILL);
-                canvas.drawRect(rect.origin.x, rect.origin.y,
-                        rect.origin.x + rect.width,
-                        rect.origin.y + rect.height, bgPaint);
-            }
-            canvas.drawRect(rect.origin.x, rect.origin.y,
-                    rect.origin.x + rect.width,
-                    rect.origin.y + rect.height, paint);
-        }
-    }
-
-    private void drawBracketHighlightRects(Canvas canvas, @Nullable List<BracketHighlightRect> rects) {
-        if (rects == null || rects.isEmpty()) return;
-        for (BracketHighlightRect rect : rects) {
-            if (rect.origin == null) continue;
-            canvas.drawRect(rect.origin.x, rect.origin.y,
-                    rect.origin.x + rect.width,
-                    rect.origin.y + rect.height, mBracketHighlightBgPaint);
-            canvas.drawRect(rect.origin.x, rect.origin.y,
-                    rect.origin.x + rect.width,
-                    rect.origin.y + rect.height, mBracketHighlightBorderPaint);
-        }
-    }
-
-    private void applyFontStyle(int fontStyle) {
-        boolean bold = (fontStyle & FontStyle.BOLD) != 0;
-        boolean italic = (fontStyle & FontStyle.ITALIC) != 0;
-
-        int style = Typeface.NORMAL;
-        if (bold && italic) style = Typeface.BOLD_ITALIC;
-        else if (bold) style = Typeface.BOLD;
-        else if (italic) style = Typeface.ITALIC;
-
-        mTextPaint.setTypeface(mTextTypefaces[style]);
-        mTextPaint.setStrikeThruText((fontStyle & FontStyle.STRIKETHROUGH) != 0);
-    }
-
-    private void resetFontStyle() {
-        mTextPaint.setTypeface(mTextTypefaces[Typeface.NORMAL]);
-        mTextPaint.setStrikeThruText(false);
-        mTextPaint.setAlpha(255);
-        mTextPaint.setColor(mTheme.textColor);
     }
 
     private void resetCursorBlink() {
