@@ -37,6 +37,9 @@ public class SweetEditorViewMacOS: NSView, NSTextInputClient, CompletionEditorAc
     private var localKeyDownMonitor: Any?
     private var performanceOverlayTimer: Timer?
     private var cursorBlinkTimer: Timer?
+    private var transientScrollbarRefreshTimer: Timer?
+    private var hoverTrackingArea: NSTrackingArea?
+    private var cachedScrollbarHoverRegions: ScrollbarHoverRegions?
     private var isCursorBlinkVisible = true
     private var pendingFrameBuildDurationMs: Double = 0
     private var performanceWindowStartTimestamp: CFTimeInterval?
@@ -84,6 +87,7 @@ public class SweetEditorViewMacOS: NSView, NSTextInputClient, CompletionEditorAc
         wantsLayer = true
         layer?.backgroundColor = EditorRenderer.theme.backgroundColor
         editorCore = SweetEditorCore(fontSize: 14.0, fontName: "Menlo")
+        editorCore.setScrollbarConfig(ScrollbarDefaults.defaultConfig())
         editorCore.setCompositionEnabled(true)
         editorCore.setReadOnly(false)
         // Sync current theme to Core first so syntax styles are registered immediately.
@@ -504,6 +508,8 @@ public class SweetEditorViewMacOS: NSView, NSTextInputClient, CompletionEditorAc
             stopCursorBlink(hideCursor: true)
             return
         }
+        installHoverTrackingArea()
+        window?.acceptsMouseMovedEvents = true
         installLocalKeyMonitorIfNeeded()
         updatePerformanceOverlayRefreshState()
         updateViewportAndRedraw()
@@ -518,9 +524,30 @@ public class SweetEditorViewMacOS: NSView, NSTextInputClient, CompletionEditorAc
     deinit {
         performanceOverlayTimer?.invalidate()
         cursorBlinkTimer?.invalidate()
+        transientScrollbarRefreshTimer?.invalidate()
+        hoverTrackingArea = nil
         if let localKeyDownMonitor {
             NSEvent.removeMonitor(localKeyDownMonitor)
         }
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        installHoverTrackingArea()
+    }
+
+    private func installHoverTrackingArea() {
+        if let hoverTrackingArea {
+            removeTrackingArea(hoverTrackingArea)
+        }
+        let trackingArea = NSTrackingArea(
+            rect: .zero,
+            options: [.activeInKeyWindow, .inVisibleRect, .mouseMoved],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea)
+        hoverTrackingArea = trackingArea
     }
 
     override func setFrameSize(_ newSize: NSSize) {
@@ -538,6 +565,12 @@ public class SweetEditorViewMacOS: NSView, NSTextInputClient, CompletionEditorAc
     private func rebuildAndRedraw() {
         let buildStart = CACurrentMediaTime()
         renderModel = editorCore.buildRenderModel()
+        cachedScrollbarHoverRegions = ScrollbarHoverReveal.cachedRegions(
+            from: cachedScrollbarHoverRegions,
+            latestModel: renderModel,
+            fallbackMetrics: editorCore.getScrollMetrics(),
+            scrollbarConfig: editorCore.scrollbarConfig
+        )
         pendingFrameBuildDurationMs = (CACurrentMediaTime() - buildStart) * 1000
         if completionPopupController?.isShowing == true {
             updateCompletionPopupPosition()
@@ -651,14 +684,16 @@ public class SweetEditorViewMacOS: NSView, NSTextInputClient, CompletionEditorAc
         // Set text matrix to flip text rendering (CoreText expects unflipped coordinates)
         context.textMatrix = CGAffineTransform(scaleX: 1.0, y: -1.0)
 
-        EditorRenderer.draw(context: context,
-                           model: model,
-                           core: editorCore,
-                           viewHeight: bounds.height,
-                           iconProvider: editorIconProvider,
-                           isCursorBlinkVisible: isCursorBlinkVisible && isEditorFocused())
+        let needsTransientRefresh = EditorRenderer.draw(context: context,
+                                                        model: model,
+                                                        core: editorCore,
+                                                        viewHeight: bounds.height,
+                                                        iconProvider: editorIconProvider,
+                                                        isCursorBlinkVisible: isCursorBlinkVisible && isEditorFocused())
 
         context.restoreGState()
+
+        updateTransientScrollbarRefresh(needsRefresh: needsTransientRefresh)
 
         let frameEnd = CACurrentMediaTime()
         let drawDurationMs = (frameEnd - frameStart) * 1000
@@ -733,6 +768,22 @@ public class SweetEditorViewMacOS: NSView, NSTextInputClient, CompletionEditorAc
         metricsText.draw(at: textOrigin, withAttributes: textAttributes)
     }
 
+    private func updateTransientScrollbarRefresh(needsRefresh: Bool) {
+        guard editorCore.scrollbarConfig.mode == .TRANSIENT else {
+            transientScrollbarRefreshTimer?.invalidate()
+            transientScrollbarRefreshTimer = nil
+            return
+        }
+        guard needsRefresh else {
+            transientScrollbarRefreshTimer?.invalidate()
+            transientScrollbarRefreshTimer = nil
+            return
+        }
+        ScrollbarDefaults.scheduleTransientRefreshTimer(&transientScrollbarRefreshTimer) { [weak self] in
+            self?.rebuildAndRedraw()
+        }
+    }
+
     // MARK: - Mouse Events
 
     override func mouseDown(with event: NSEvent) {
@@ -757,6 +808,31 @@ public class SweetEditorViewMacOS: NSView, NSTextInputClient, CompletionEditorAc
         resetCursorBlink()
         let point = convert(event.locationInWindow, from: nil)
         let mods = modifiersFromEvent(event)
+        let result = editorCore.handleGestureEvent(type: .mouseMove, points: [(Float(point.x), Float(point.y))],
+                                                   modifiers: mods)
+        handleGestureResult(result)
+        rebuildAndRedraw()
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        let mods = modifiersFromEvent(event)
+        if ScrollbarHoverReveal.shouldReveal(
+            at: point,
+            currentModel: renderModel,
+            cachedRegions: cachedScrollbarHoverRegions
+        ) {
+            let result = editorCore.handleGestureEvent(
+                type: .directScroll,
+                points: [(Float(point.x), Float(point.y))],
+                modifiers: mods,
+                wheelDeltaX: 0,
+                wheelDeltaY: 0
+            )
+            handleGestureResult(result)
+            rebuildAndRedraw()
+            return
+        }
         let result = editorCore.handleGestureEvent(type: .mouseMove, points: [(Float(point.x), Float(point.y))],
                                                    modifiers: mods)
         handleGestureResult(result)

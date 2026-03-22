@@ -19,6 +19,8 @@ struct EditorTheme {
     var guideLineColor: CGColor
     var separatorLineColor: CGColor
     var splitLineColor: CGColor
+    var scrollbarTrackColor: CGColor
+    var scrollbarThumbColor: CGColor
     var compositionUnderlineColor: CGColor
     var inlayHintBgColor: CGColor
     var inlayHintTextAlpha: CGFloat
@@ -67,6 +69,8 @@ struct EditorTheme {
             guideLineColor:           CGColor(srgbRed: 1.0, green: 1.0, blue: 1.0, alpha: 0x33/255.0),
             separatorLineColor:       CGColor(srgbRed: 0x6A/255.0, green: 0x99/255.0, blue: 0x55/255.0, alpha: 1.0),
             splitLineColor:           CGColor(srgbRed: 1.0, green: 1.0, blue: 1.0, alpha: 0x33/255.0),
+            scrollbarTrackColor:      CGColor(srgbRed: 1.0, green: 1.0, blue: 1.0, alpha: 0x18/255.0),
+            scrollbarThumbColor:      CGColor(srgbRed: 0xA8/255.0, green: 0xA8/255.0, blue: 0xA8/255.0, alpha: 0xD0/255.0),
             compositionUnderlineColor: CGColor(srgbRed: 1.0, green: 0xCC/255.0, blue: 0.0, alpha: 1.0),
             inlayHintBgColor:         CGColor(srgbRed: 1.0, green: 1.0, blue: 1.0, alpha: 0x20/255.0),
             inlayHintTextAlpha:       0.55,
@@ -107,6 +111,8 @@ struct EditorTheme {
             guideLineColor:           CGColor(srgbRed: 0.0, green: 0.0, blue: 0.0, alpha: 0x33/255.0),
             separatorLineColor:       CGColor(srgbRed: 0.0, green: 0x80/255.0, blue: 0.0, alpha: 1.0),
             splitLineColor:           CGColor(srgbRed: 0.0, green: 0.0, blue: 0.0, alpha: 0x33/255.0),
+            scrollbarTrackColor:      CGColor(srgbRed: 0x2A/255.0, green: 0x3B/255.0, blue: 0x55/255.0, alpha: 0x12/255.0),
+            scrollbarThumbColor:      CGColor(srgbRed: 0x5C/255.0, green: 0x6A/255.0, blue: 0x7A/255.0, alpha: 0x96/255.0),
             compositionUnderlineColor: CGColor(srgbRed: 0.0, green: 0x66/255.0, blue: 1.0, alpha: 1.0),
             inlayHintBgColor:         CGColor(srgbRed: 0.0, green: 0.0, blue: 0.0, alpha: 0x20/255.0),
             inlayHintTextAlpha:       0.55,

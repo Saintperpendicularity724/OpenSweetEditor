@@ -66,6 +66,7 @@ class SweetEditorCore {
     private(set) var handle: Int = 0
     private lazy var protocolDecoder = ProtocolDecoder(owner: self)
     private lazy var protocolEncoder = ProtocolEncoder(owner: self)
+    private(set) var scrollbarConfig = ScrollbarConfig()
 
     struct InlayHintPayload {
         enum Kind {
@@ -1231,7 +1232,7 @@ class SweetEditorCore {
     }
 
     private func defaultScrollbarModel() -> ScrollbarModel {
-        ScrollbarModel(visible: false, track: defaultScrollbarRect(), thumb: defaultScrollbarRect())
+        ScrollbarModel(visible: false, alpha: 0, track: defaultScrollbarRect(), thumb: defaultScrollbarRect())
     }
 
     private func readScrollbarRect(_ reader: inout BinaryReader) -> ScrollbarRect? {
@@ -1245,11 +1246,12 @@ class SweetEditorCore {
 
     private func readScrollbarModel(_ reader: inout BinaryReader) -> ScrollbarModel? {
         guard let visible = reader.readInt32(),
+              let alpha = reader.readFloat(),
               let track = readScrollbarRect(&reader),
               let thumb = readScrollbarRect(&reader) else {
             return nil
         }
-        return ScrollbarModel(visible: visible != 0, track: track, thumb: thumb)
+        return ScrollbarModel(visible: visible != 0, alpha: alpha, track: track, thumb: thumb)
     }
 
     private func readEditorRenderModel(_ data: Data) -> EditorRenderModel? {
@@ -1331,7 +1333,7 @@ class SweetEditorCore {
 
         var verticalScrollbar = defaultScrollbarModel()
         var horizontalScrollbar = defaultScrollbarModel()
-        if reader.data.count - reader.offset >= 72 {
+        if reader.data.count - reader.offset >= 80 {
             guard let vertical = readScrollbarModel(&reader),
                   let horizontal = readScrollbarModel(&reader) else {
                 return nil
@@ -1759,6 +1761,46 @@ class SweetEditorCore {
         }
     }
 
+    struct ScrollbarConfig {
+        enum ScrollbarMode: Int32 {
+            case ALWAYS = 0
+            case TRANSIENT = 1
+            case NEVER = 2
+        }
+
+        enum ScrollbarTrackTapMode: Int32 {
+            case JUMP = 0
+            case DISABLED = 1
+        }
+
+        let thickness: Float
+        let minThumb: Float
+        let thumbHitPadding: Float
+        let mode: ScrollbarMode
+        let thumbDraggable: Bool
+        let trackTapMode: ScrollbarTrackTapMode
+        let fadeDelayMs: Int32
+        let fadeDurationMs: Int32
+
+        init(thickness: Float = 10.0,
+             minThumb: Float = 24.0,
+             thumbHitPadding: Float = 0.0,
+             mode: ScrollbarMode = .ALWAYS,
+             thumbDraggable: Bool = true,
+             trackTapMode: ScrollbarTrackTapMode = .JUMP,
+             fadeDelayMs: Int32 = 700,
+             fadeDurationMs: Int32 = 300) {
+            self.thickness = thickness
+            self.minThumb = minThumb
+            self.thumbHitPadding = thumbHitPadding
+            self.mode = mode
+            self.thumbDraggable = thumbDraggable
+            self.trackTapMode = trackTapMode
+            self.fadeDelayMs = fadeDelayMs
+            self.fadeDurationMs = fadeDurationMs
+        }
+    }
+
     // MARK: - Position Rect
 
     /// Screen-space rectangle for a caret/text position (used for floating panel placement).
@@ -1823,6 +1865,23 @@ class SweetEditorCore {
             canScrollX: false,
             canScrollY: false
         )
+    }
+
+    func setScrollbarConfig(_ config: ScrollbarConfig) {
+        scrollbarConfig = config
+        performCoreCall {
+            editor_set_scrollbar_config(
+                handle,
+                config.thickness,
+                config.minThumb,
+                config.thumbHitPadding,
+                config.mode.rawValue,
+                config.thumbDraggable ? 1 : 0,
+                config.trackTapMode.rawValue,
+                config.fadeDelayMs,
+                config.fadeDurationMs
+            )
+        }
     }
 
     func scrollToLine(line: Int, behavior: UInt8) {

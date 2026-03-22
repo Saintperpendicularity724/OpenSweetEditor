@@ -38,6 +38,12 @@ final class SweetEditorMacOSTests: XCTestCase {
         XCTAssertGreaterThan(light.inlayHintIconColor.alpha, 0)
     }
 
+    func testARGBColorConversionPreservesZeroAlpha() {
+        let color = EditorRenderer.cgColorFromARGB(Int32(bitPattern: 0x00000000))
+
+        XCTAssertEqual(color.alpha, 0, accuracy: 0.0001)
+    }
+
     func testModelFoldRegionAPIAcceptsValueObjects() {
         let core = SweetEditorCore(fontSize: 14.0, fontName: "Menlo")
         core.setFoldRegions([
@@ -87,6 +93,78 @@ final class SweetEditorMacOSTests: XCTestCase {
         let provider = StubIconProvider()
         view.editorIconProvider = provider
         XCTAssertNotNil(view.editorIconProvider)
+    }
+
+    func testRendererDrawsScrollbarThumbAndRequestsTransientRefresh() {
+        let core = SweetEditorCore(fontSize: 14.0, fontName: "Menlo")
+        let context = makeBitmapContext(width: 120, height: 120)
+        let model = makeRenderModel(
+            viewportWidth: 120,
+            viewportHeight: 120,
+            verticalScrollbar: ScrollbarModel(
+                visible: true,
+                alpha: 0.5,
+                track: ScrollbarRect(origin: PointData(x: 108, y: 0), width: 12, height: 108),
+                thumb: ScrollbarRect(origin: PointData(x: 108, y: 16), width: 12, height: 32)
+            ),
+            horizontalScrollbar: ScrollbarModel(
+                visible: true,
+                alpha: 0.35,
+                track: ScrollbarRect(origin: PointData(x: 0, y: 108), width: 108, height: 12),
+                thumb: ScrollbarRect(origin: PointData(x: 20, y: 108), width: 36, height: 12)
+            )
+        )
+
+        let needsRefresh = EditorRenderer.draw(
+            context: context,
+            model: model,
+            core: core,
+            viewHeight: 120,
+            iconProvider: nil,
+            isCursorBlinkVisible: false
+        )
+
+        XCTAssertTrue(needsRefresh)
+        XCTAssertNotEqual(pixelARGB(context: context, x: 114, y: 24), pixelARGB(context: context, x: 4, y: 4))
+        XCTAssertNotEqual(pixelARGB(context: context, x: 28, y: 114), pixelARGB(context: context, x: 4, y: 4))
+        XCTAssertNotEqual(pixelARGB(context: context, x: 108, y: 24), pixelARGB(context: context, x: 114, y: 24))
+    }
+
+    func testCoreScrollbarConfigCanDisableScrollbars() {
+        let core = SweetEditorCore(fontSize: 14.0, fontName: "Menlo")
+        core.setViewport(width: 160, height: 80)
+        core.setDocument(SweetDocument(text: Array(repeating: "long long line for scrolling", count: 60).joined(separator: "\n")))
+        core.setScrollbarConfig(
+            SweetEditorCore.ScrollbarConfig(
+                thickness: 12.0,
+                minThumb: 24.0,
+                thumbHitPadding: 0.0,
+                mode: .NEVER,
+                thumbDraggable: true,
+                trackTapMode: .JUMP,
+                fadeDelayMs: 700,
+                fadeDurationMs: 300
+            )
+        )
+
+        let model = core.buildRenderModel()
+
+        XCTAssertFalse(model?.vertical_scrollbar.visible ?? true)
+        XCTAssertFalse(model?.horizontal_scrollbar.visible ?? true)
+    }
+
+    func testDefaultScrollbarConfigMatchesTransientParity() {
+        let view = SweetEditorViewMacOS(frame: NSRect(x: 0, y: 0, width: 320, height: 160))
+        let core = readPrivateValue(view, key: "editorCore", as: SweetEditorCore.self)
+        let config = core?.scrollbarConfig
+
+        XCTAssertEqual(Double(config?.thickness ?? .nan), 8.0, accuracy: 0.001)
+        XCTAssertEqual(Double(config?.minThumb ?? .nan), 48.0, accuracy: 0.001)
+        XCTAssertEqual(Double(config?.thumbHitPadding ?? .nan), 16.0, accuracy: 0.001)
+        XCTAssertEqual(config?.mode, .TRANSIENT)
+        XCTAssertEqual(config?.trackTapMode, .DISABLED)
+        XCTAssertEqual(config?.fadeDelayMs, 700)
+        XCTAssertEqual(config?.fadeDurationMs, 300)
     }
 
     func testMacViewExposesDecorationParityAPIs() {
@@ -156,6 +234,107 @@ final class SweetEditorMacOSTests: XCTestCase {
         XCTAssertNotNil(view.onGutterIconClick)
     }
 
+    func testMacViewInstallsMouseMovedTrackingForScrollbarHoverReveal() {
+        let view = SweetEditorViewMacOS(frame: NSRect(x: 0, y: 0, width: 320, height: 160))
+
+        view.updateTrackingAreas()
+
+        XCTAssertTrue(
+            view.trackingAreas.contains {
+                $0.options.contains(.mouseMoved)
+                    && $0.options.contains(.activeInKeyWindow)
+                    && $0.options.contains(.inVisibleRect)
+            }
+        )
+    }
+
+    func testScrollbarHoverRevealUsesLastVisibleTrackWhenCurrentModelIsHidden() {
+        let visibleModel = makeRenderModel(
+            viewportWidth: 120,
+            viewportHeight: 120,
+            verticalScrollbar: ScrollbarModel(
+                visible: true,
+                alpha: 1.0,
+                track: ScrollbarRect(origin: PointData(x: 108, y: 0), width: 12, height: 108),
+                thumb: ScrollbarRect(origin: PointData(x: 108, y: 16), width: 12, height: 32)
+            ),
+            horizontalScrollbar: ScrollbarModel(
+                visible: false,
+                alpha: 0,
+                track: ScrollbarRect(origin: PointData(x: 0, y: 0), width: 0, height: 0),
+                thumb: ScrollbarRect(origin: PointData(x: 0, y: 0), width: 0, height: 0)
+            )
+        )
+        let hiddenModel = makeRenderModel(
+            viewportWidth: 120,
+            viewportHeight: 120,
+            verticalScrollbar: ScrollbarModel(
+                visible: false,
+                alpha: 0,
+                track: ScrollbarRect(origin: PointData(x: 0, y: 0), width: 0, height: 0),
+                thumb: ScrollbarRect(origin: PointData(x: 0, y: 0), width: 0, height: 0)
+            ),
+            horizontalScrollbar: ScrollbarModel(
+                visible: false,
+                alpha: 0,
+                track: ScrollbarRect(origin: PointData(x: 0, y: 0), width: 0, height: 0),
+                thumb: ScrollbarRect(origin: PointData(x: 0, y: 0), width: 0, height: 0)
+            )
+        )
+
+        let cachedRegions = ScrollbarHoverReveal.cachedRegions(from: nil, latestModel: visibleModel)
+
+        XCTAssertTrue(
+            ScrollbarHoverReveal.shouldReveal(
+                at: CGPoint(x: 114, y: 24),
+                currentModel: hiddenModel,
+                cachedRegions: cachedRegions
+            )
+        )
+    }
+
+    func testScrollbarHoverRevealBuildsInitialRegionsFromScrollMetrics() {
+        let metrics = SweetEditorCore.ScrollMetrics(
+            scale: 1.0,
+            scrollX: 0,
+            scrollY: 0,
+            maxScrollX: 0,
+            maxScrollY: 400,
+            contentWidth: 100,
+            contentHeight: 800,
+            viewportWidth: 120,
+            viewportHeight: 120,
+            textAreaX: 8,
+            textAreaWidth: 112,
+            canScrollX: false,
+            canScrollY: true
+        )
+
+        let cachedRegions = ScrollbarHoverReveal.cachedRegions(
+            from: nil,
+            latestModel: nil,
+            fallbackMetrics: metrics,
+            scrollbarConfig: SweetEditorCore.ScrollbarConfig(
+                thickness: 12,
+                minThumb: 48,
+                thumbHitPadding: 16,
+                mode: .TRANSIENT,
+                thumbDraggable: true,
+                trackTapMode: .DISABLED,
+                fadeDelayMs: 700,
+                fadeDurationMs: 300
+            )
+        )
+
+        XCTAssertTrue(
+            ScrollbarHoverReveal.shouldReveal(
+                at: CGPoint(x: 114, y: 24),
+                currentModel: nil,
+                cachedRegions: cachedRegions
+            )
+        )
+    }
+
     func testCursorBlinkVisibilityFollowsResponderLifecycle() {
         let view = SweetEditorViewMacOS(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
 
@@ -173,6 +352,11 @@ final class SweetEditorMacOSTests: XCTestCase {
         return mirror.children.first(where: { $0.label == key })?.value as? Bool ?? false
     }
 
+    private func readPrivateValue<T>(_ object: Any, key: String, as _: T.Type) -> T? {
+        let mirror = Mirror(reflecting: object)
+        return mirror.children.first(where: { $0.label == key })?.value as? T
+    }
+
     private func makeCoreWithSingleLineDocument(_ text: String) -> SweetEditorCore {
         let core = SweetEditorCore(fontSize: 14.0, fontName: "Menlo")
         core.setViewport(width: 640, height: 480)
@@ -188,6 +372,62 @@ final class SweetEditorMacOSTests: XCTestCase {
             }
         }
         return false
+    }
+
+    private func makeRenderModel(viewportWidth: Float,
+                                 viewportHeight: Float,
+                                 verticalScrollbar: ScrollbarModel,
+                                 horizontalScrollbar: ScrollbarModel) -> EditorRenderModel {
+        EditorRenderModel(
+            split_x: 0,
+            scroll_x: 0,
+            scroll_y: 0,
+            viewport_width: viewportWidth,
+            viewport_height: viewportHeight,
+            current_line: PointData(x: 0, y: 0),
+            lines: [],
+            cursor: Cursor(text_position: TextPositionData(line: 0, column: 0), position: PointData(x: 0, y: 0), height: 0, visible: false, show_dragger: false),
+            selection_rects: [],
+            selection_start_handle: SelectionHandle(position: PointData(x: 0, y: 0), height: 0, visible: false),
+            selection_end_handle: SelectionHandle(position: PointData(x: 0, y: 0), height: 0, visible: false),
+            composition_decoration: CompositionDecoration(active: false, origin: PointData(x: 0, y: 0), width: 0, height: 0),
+            guide_segments: [],
+            diagnostic_decorations: [],
+            max_gutter_icons: 0,
+            fold_arrow_x: 0,
+            linked_editing_rects: [],
+            bracket_highlight_rects: [],
+            vertical_scrollbar: verticalScrollbar,
+            horizontal_scrollbar: horizontalScrollbar
+        )
+    }
+
+    private func makeBitmapContext(width: Int, height: Int) -> CGContext {
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            fatalError("Failed to create test bitmap context")
+        }
+        return context
+    }
+
+    private func pixelARGB(context: CGContext, x: Int, y: Int) -> UInt32 {
+        guard let data = context.data else {
+            return 0
+        }
+        let bytes = data.bindMemory(to: UInt8.self, capacity: context.bytesPerRow * context.height)
+        let offset = y * context.bytesPerRow + x * 4
+        let r = UInt32(bytes[offset])
+        let g = UInt32(bytes[offset + 1])
+        let b = UInt32(bytes[offset + 2])
+        let a = UInt32(bytes[offset + 3])
+        return (a << 24) | (r << 16) | (g << 8) | b
     }
 
     func testDecorationProviderDoesNotRefreshOnScrollWhenVisibleRangeUnchanged() {

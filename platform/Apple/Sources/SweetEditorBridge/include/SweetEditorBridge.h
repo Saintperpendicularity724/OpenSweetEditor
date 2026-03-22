@@ -128,6 +128,10 @@ void editor_get_cursor_rect(intptr_t editor_handle,
 
 // ===================== Navigation API =====================
 
+void editor_set_scrollbar_config(intptr_t editor_handle,
+                                 float thickness, float min_thumb, float thumb_hit_padding,
+                                 int mode, int thumb_draggable, int track_tap_mode,
+                                 int fade_delay_ms, int fade_duration_ms);
 void editor_scroll_to_line(intptr_t editor_handle, size_t line, uint8_t behavior);
 void editor_goto_position(intptr_t editor_handle, size_t line, size_t column);
 void editor_set_scroll(intptr_t editor_handle, float scroll_x, float scroll_y);

@@ -26,7 +26,7 @@ struct EditorRenderer {
                      core: SweetEditorCore,
                      viewHeight: CGFloat,
                      iconProvider: EditorIconProvider? = nil,
-                     isCursorBlinkVisible: Bool = true) {
+                     isCursorBlinkVisible: Bool = true) -> Bool {
         let t = theme
         let rect = CGRect(x: 0, y: 0,
                           width: CGFloat(model.viewport_width),
@@ -133,6 +133,8 @@ struct EditorRenderer {
                            font: core.regularFont,
                            iconProvider: iconProvider)
         }
+
+        return drawScrollbars(context: context, model: model)
     }
 
     // MARK: - Drawing Helpers
@@ -491,6 +493,55 @@ struct EditorRenderer {
         }
     }
 
+    static func drawScrollbars(context: CGContext, model: EditorRenderModel) -> Bool {
+        let vertical = model.vertical_scrollbar
+        let horizontal = model.horizontal_scrollbar
+        let verticalAlpha = scrollbarAlpha(vertical)
+        let horizontalAlpha = scrollbarAlpha(horizontal)
+        let hasVertical = isDrawableScrollbar(vertical, alpha: verticalAlpha)
+        let hasHorizontal = isDrawableScrollbar(horizontal, alpha: horizontalAlpha)
+        guard hasVertical || hasHorizontal else {
+            return false
+        }
+
+        var verticalTrackX: CGFloat = 0
+        var verticalTrackWidth: CGFloat = 0
+        var horizontalTrackY: CGFloat = 0
+        var horizontalTrackHeight: CGFloat = 0
+
+        if hasVertical {
+            let trackRect = insetScrollbarRect(rect(from: vertical.track))
+            let thumbRect = insetScrollbarRect(rect(from: vertical.thumb))
+            verticalTrackX = trackRect.minX
+            verticalTrackWidth = trackRect.width
+            context.setFillColor(color(theme.scrollbarTrackColor, alphaMultiplier: verticalAlpha))
+            fillRoundedScrollbarRect(trackRect, context: context)
+            context.setFillColor(color(theme.scrollbarThumbColor, alphaMultiplier: verticalAlpha))
+            fillRoundedScrollbarRect(thumbRect, context: context)
+        }
+
+        if hasHorizontal {
+            let trackRect = insetScrollbarRect(rect(from: horizontal.track))
+            let thumbRect = insetScrollbarRect(rect(from: horizontal.thumb))
+            horizontalTrackY = trackRect.minY
+            horizontalTrackHeight = trackRect.height
+            context.setFillColor(color(theme.scrollbarTrackColor, alphaMultiplier: horizontalAlpha))
+            fillRoundedScrollbarRect(trackRect, context: context)
+            context.setFillColor(color(theme.scrollbarThumbColor, alphaMultiplier: horizontalAlpha))
+            fillRoundedScrollbarRect(thumbRect, context: context)
+        }
+
+        if hasVertical && hasHorizontal {
+            context.setFillColor(color(theme.scrollbarTrackColor, alphaMultiplier: max(verticalAlpha, horizontalAlpha)))
+            fillRoundedScrollbarRect(
+                CGRect(x: verticalTrackX, y: horizontalTrackY, width: verticalTrackWidth, height: horizontalTrackHeight),
+                context: context
+            )
+        }
+
+        return true
+    }
+
     // MARK: - Color Helpers
 
     static func cgColorFromARGB(_ argb: Int32) -> CGColor {
@@ -498,7 +549,59 @@ struct EditorRenderer {
         let r = CGFloat((argb >> 16) & 0xFF) / 255.0
         let g = CGFloat((argb >> 8) & 0xFF) / 255.0
         let b = CGFloat(argb & 0xFF) / 255.0
-        return CGColor(red: r, green: g, blue: b, alpha: a == 0 ? 1.0 : a)
+        return CGColor(red: r, green: g, blue: b, alpha: a)
+    }
+
+    private static func rect(from scrollbarRect: ScrollbarRect) -> CGRect {
+        CGRect(
+            x: CGFloat(scrollbarRect.origin.x),
+            y: CGFloat(scrollbarRect.origin.y),
+            width: CGFloat(scrollbarRect.width),
+            height: CGFloat(scrollbarRect.height)
+        )
+    }
+
+    private static func scrollbarAlpha(_ scrollbar: ScrollbarModel) -> CGFloat {
+        clampUnit(scrollbar.alpha)
+    }
+
+    private static func isDrawableScrollbar(_ scrollbar: ScrollbarModel, alpha: CGFloat) -> Bool {
+        scrollbar.visible
+            && alpha > 0
+            && scrollbar.track.width > 0
+            && scrollbar.track.height > 0
+            && scrollbar.thumb.width > 0
+            && scrollbar.thumb.height > 0
+    }
+
+    private static func color(_ base: CGColor, alphaMultiplier: CGFloat) -> CGColor {
+        base.copy(alpha: base.alpha * clampUnit(alphaMultiplier)) ?? base
+    }
+
+    private static func insetScrollbarRect(_ rect: CGRect) -> CGRect {
+        guard rect.width > 0, rect.height > 0 else { return rect }
+        if rect.height >= rect.width {
+            let insetX = max(1.0, floor(rect.width * 0.25))
+            return rect.insetBy(dx: insetX, dy: 1.0).integral
+        }
+
+        let insetY = max(1.0, floor(rect.height * 0.25))
+        return rect.insetBy(dx: 1.0, dy: insetY).integral
+    }
+
+    private static func fillRoundedScrollbarRect(_ rect: CGRect, context: CGContext) {
+        guard rect.width > 0, rect.height > 0 else { return }
+        let radius = min(rect.width, rect.height) * 0.5
+        let path = CGPath(roundedRect: rect, cornerWidth: radius, cornerHeight: radius, transform: nil)
+        context.saveGState()
+        context.setShouldAntialias(false)
+        context.addPath(path)
+        context.fillPath()
+        context.restoreGState()
+    }
+
+    private static func clampUnit<T: BinaryFloatingPoint>(_ value: T) -> CGFloat {
+        CGFloat(max(0, min(1, value)))
     }
 
     static func drawImage(context: CGContext, image: CGImage, rect: CGRect) {

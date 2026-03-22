@@ -197,6 +197,7 @@ struct ScrollbarRect: Codable {
 
 struct ScrollbarModel: Codable {
     let visible: Bool
+    let alpha: Float
     let track: ScrollbarRect
     let thumb: ScrollbarRect
 }

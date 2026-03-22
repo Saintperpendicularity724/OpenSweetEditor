@@ -18,6 +18,7 @@ class IOSEditorView: UIView, UIKeyInput, UITextInputTraits, UIPointerInteraction
     private var completionPopupController: CompletionPopupController?
     private var newLineActionProviderManager: NewLineActionProviderManager?
     private var pinchRecognizer: UIPinchGestureRecognizer!
+    private var transientScrollbarRefreshTimer: Timer?
 
     /// Current language configuration.
     private(set) var languageConfiguration: LanguageConfiguration?
@@ -53,6 +54,7 @@ class IOSEditorView: UIView, UIKeyInput, UITextInputTraits, UIPointerInteraction
         isUserInteractionEnabled = true
 
         editorCore = SweetEditorCore(fontSize: 14.0, fontName: "Menlo")
+        editorCore.setScrollbarConfig(ScrollbarDefaults.defaultConfig())
         EditorRenderer.applyTheme(EditorRenderer.theme, core: editorCore)
         decorationProviderManager = DecorationProviderManager(
             core: editorCore,
@@ -464,6 +466,10 @@ class IOSEditorView: UIView, UIKeyInput, UITextInputTraits, UIPointerInteraction
         setNeedsDisplay()
     }
 
+    deinit {
+        transientScrollbarRefreshTimer?.invalidate()
+    }
+
     /// Switches the editor theme.
     func applyTheme(_ theme: EditorTheme) {
         let bgColor = EditorRenderer.applyTheme(theme, core: editorCore)
@@ -495,13 +501,30 @@ class IOSEditorView: UIView, UIKeyInput, UITextInputTraits, UIPointerInteraction
         // and we've flipped, we need to re-flip the text matrix
         context.textMatrix = CGAffineTransform.identity
 
-        EditorRenderer.draw(context: context,
-                           model: model,
-                           core: editorCore,
-                           viewHeight: bounds.height,
-                           iconProvider: editorIconProvider)
+        let needsTransientRefresh = EditorRenderer.draw(context: context,
+                                                        model: model,
+                                                        core: editorCore,
+                                                        viewHeight: bounds.height,
+                                                        iconProvider: editorIconProvider)
 
         context.restoreGState()
+        updateTransientScrollbarRefresh(needsRefresh: needsTransientRefresh)
+    }
+
+    private func updateTransientScrollbarRefresh(needsRefresh: Bool) {
+        guard editorCore.scrollbarConfig.mode == .TRANSIENT else {
+            transientScrollbarRefreshTimer?.invalidate()
+            transientScrollbarRefreshTimer = nil
+            return
+        }
+        guard needsRefresh else {
+            transientScrollbarRefreshTimer?.invalidate()
+            transientScrollbarRefreshTimer = nil
+            return
+        }
+        ScrollbarDefaults.scheduleTransientRefreshTimer(&transientScrollbarRefreshTimer) { [weak self] in
+            self?.rebuildAndRedraw()
+        }
     }
 
     // MARK: - Touch Events
