@@ -187,9 +187,3 @@ SweetEditor 采用 [GNU Lesser General Public License v2.1 or later](LICENSE)（
    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=FinalScave/OpenSweetEditor&type=date&legend=top-left" />
  </picture>
 </a>
-
-## 贡献者
-
-感谢所有为 OpenSweetEditor 做出贡献的人！
-
-[![Contributors](https://contrib.rocks/image?repo=FinalScave/OpenSweetEditor)](https://github.com/FinalScave/OpenSweetEditor/graphs/contributors)
