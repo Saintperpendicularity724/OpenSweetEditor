@@ -14,7 +14,7 @@ import com.qiplat.sweeteditor.core.adornment.FoldRegion;
 import com.qiplat.sweeteditor.core.adornment.GutterIcon;
 import com.qiplat.sweeteditor.core.adornment.IndentGuide;
 import com.qiplat.sweeteditor.core.adornment.InlayHint;
-import com.qiplat.sweeteditor.core.adornment.PhantomText;
+
 import com.qiplat.sweeteditor.core.adornment.SeparatorGuide;
 import com.qiplat.sweeteditor.core.adornment.StyleSpan;
 import com.qiplat.sweeteditor.core.foundation.TextPosition;
@@ -49,7 +49,7 @@ import java.util.concurrent.Executors;
 
 /**
  * Demo DecorationProvider:
- * 1) sync push InlayHint + PhantomText
+ * 1) sync push InlayHint
  * 2) sync push SweetLine syntax/indent/fold analysis
  * 3) async push simulated diagnostics
  */
@@ -70,9 +70,6 @@ public class DemoDecorationProvider implements DecorationProvider {
     private static final int STYLE_ANNOTATION = EditorTheme.STYLE_ANNOTATION;
     private static final int STYLE_COLOR = EditorTheme.STYLE_PREPROCESSOR + 1;
     private static final int MAX_DYNAMIC_DIAGNOSTICS = 8;
-    private static final String PHANTOM_MEMBER_STUB =
-            "\n    void debugTrace(const std::string& tag) {\n        log(DEBUG, tag);\n    }";
-    private static final String PHANTOM_INLINE_HINT = " /* demo phantom */";
 
     public static final int ICON_TYPE = 1;
     public static final int ICON_AT = 2;
@@ -98,7 +95,6 @@ public class DemoDecorationProvider implements DecorationProvider {
                 DecorationType.INDENT_GUIDE,
                 DecorationType.FOLD_REGION,
                 DecorationType.INLAY_HINT,
-                DecorationType.PHANTOM_TEXT,
                 DecorationType.DIAGNOSTIC
         );
     }
@@ -129,11 +125,8 @@ public class DemoDecorationProvider implements DecorationProvider {
     @NonNull
     private DecorationResult buildSweetLineDecorationResult(@NonNull DecorationContext context,
                                                             @NonNull SparseArray<List<DiagnosticItem>> dynamicDiagnostics) {
-        SparseArray<List<PhantomText>> dynamicPhantoms = new SparseArray<>();
         if (highlightEngine == null) {
-            return new DecorationResult.Builder()
-                    .phantomTexts(dynamicPhantoms, DecorationResult.ApplyMode.REPLACE_ALL)
-                    .build();
+            return new DecorationResult.Builder().build();
         }
         SparseArray<List<StyleSpan>> syntaxSpans = new SparseArray<>();
         SparseArray<List<InlayHint>> colorInlayHints = new SparseArray<>();
@@ -142,7 +135,6 @@ public class DemoDecorationProvider implements DecorationProvider {
         List<FoldRegion> foldRegions = new ArrayList<>();
         List<SeparatorGuide> separatorGuides = new ArrayList<>();
         Set<String> seenColorHints = new HashSet<>();
-        Set<Integer> phantomLines = new HashSet<>();
         Set<String> seenDiagnostics = new HashSet<>();
         int[] diagnosticCount = new int[]{0};
         TokenRangeInfo firstKeywordRange = null;
@@ -150,7 +142,6 @@ public class DemoDecorationProvider implements DecorationProvider {
         Document editorDocument = editor.getDocument();
         if (editorDocument == null) {
             return new DecorationResult.Builder()
-                    .phantomTexts(dynamicPhantoms, DecorationResult.ApplyMode.REPLACE_ALL)
                     .syntaxSpans(syntaxSpans, DecorationResult.ApplyMode.MERGE)
                     .inlayHints(colorInlayHints, DecorationResult.ApplyMode.REPLACE_RANGE)
                     .indentGuides(indentGuides, DecorationResult.ApplyMode.REPLACE_ALL)
@@ -178,7 +169,6 @@ public class DemoDecorationProvider implements DecorationProvider {
         }
         if (cacheHighlight == null || cacheHighlight.lines == null || cacheHighlight.lines.isEmpty()) {
             return new DecorationResult.Builder()
-                    .phantomTexts(dynamicPhantoms, DecorationResult.ApplyMode.REPLACE_ALL)
                     .syntaxSpans(syntaxSpans, DecorationResult.ApplyMode.MERGE)
                     .inlayHints(colorInlayHints, DecorationResult.ApplyMode.REPLACE_RANGE)
                     .indentGuides(indentGuides, DecorationResult.ApplyMode.REPLACE_ALL)
@@ -198,8 +188,6 @@ public class DemoDecorationProvider implements DecorationProvider {
                 appendSeparator(separatorGuides, editorDocument, token);
                 appendGutterIcons(gutterIcons, editorDocument, token);
                 firstKeywordRange = appendDynamicDemoDecorations(
-                        dynamicPhantoms,
-                        phantomLines,
                         dynamicDiagnostics,
                         seenDiagnostics,
                         diagnosticCount,
@@ -236,7 +224,6 @@ public class DemoDecorationProvider implements DecorationProvider {
         }
 
         return new DecorationResult.Builder()
-                .phantomTexts(dynamicPhantoms, DecorationResult.ApplyMode.REPLACE_ALL)
                 .syntaxSpans(syntaxSpans, DecorationResult.ApplyMode.MERGE)
                 .inlayHints(colorInlayHints, DecorationResult.ApplyMode.REPLACE_RANGE)
                 .indentGuides(indentGuides, DecorationResult.ApplyMode.REPLACE_ALL)
@@ -246,9 +233,7 @@ public class DemoDecorationProvider implements DecorationProvider {
                 .build();
     }
 
-    private TokenRangeInfo appendDynamicDemoDecorations(@NonNull SparseArray<List<PhantomText>> phantoms,
-                                                        @NonNull Set<Integer> phantomLines,
-                                                        @NonNull SparseArray<List<DiagnosticItem>> diagnostics,
+    private TokenRangeInfo appendDynamicDemoDecorations(@NonNull SparseArray<List<DiagnosticItem>> diagnostics,
                                                         @NonNull Set<String> seenDiagnostics,
                                                         @NonNull int[] diagnosticCount,
                                                         TokenRangeInfo firstKeywordRange,
@@ -266,13 +251,6 @@ public class DemoDecorationProvider implements DecorationProvider {
         if (token.styleId == STYLE_KEYWORD) {
             if (firstKeywordRange == null) {
                 firstKeywordRange = range;
-            }
-            if (phantomLines.isEmpty() && ("class".equals(literal) || "struct".equals(literal))) {
-                appendPhantom(phantoms, range.line, range.endColumn, PHANTOM_MEMBER_STUB);
-                phantomLines.add(range.line);
-            } else if (phantomLines.isEmpty() && "return".equals(literal)) {
-                appendPhantom(phantoms, range.line, range.endColumn, PHANTOM_INLINE_HINT);
-                phantomLines.add(range.line);
             }
             return firstKeywordRange;
         }
@@ -306,18 +284,6 @@ public class DemoDecorationProvider implements DecorationProvider {
                     range.line, range.startColumn, range.length(), 3, 0);
         }
         return firstKeywordRange;
-    }
-
-    private static void appendPhantom(@NonNull SparseArray<List<PhantomText>> phantoms,
-                                      int line,
-                                      int column,
-                                      @NonNull String text) {
-        List<PhantomText> lineItems = phantoms.get(line);
-        if (lineItems == null) {
-            lineItems = new ArrayList<>();
-            phantoms.put(line, lineItems);
-        }
-        lineItems.add(new PhantomText(column, text));
     }
 
     private static void appendDiagnostic(@NonNull SparseArray<List<DiagnosticItem>> diagnostics,

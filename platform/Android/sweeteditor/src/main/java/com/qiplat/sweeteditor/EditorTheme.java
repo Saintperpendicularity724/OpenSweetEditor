@@ -97,6 +97,13 @@ public class EditorTheme {
     /** Bracket match highlight background color (ARGB, semi-transparent). */
     public int bracketHighlightBgColor;
 
+    /** Inline suggestion action bar background color (ARGB). */
+    public int inlineSuggestionBarBgColor;
+    /** Inline suggestion action bar accept button text color (ARGB). */
+    public int inlineSuggestionBarAcceptColor;
+    /** Inline suggestion action bar dismiss button text color (ARGB). */
+    public int inlineSuggestionBarDismissColor;
+
     /**
      * Theme text style mapping (extensible).
      * <p>Key: styleId, Value: {@link TextStyle}.
@@ -152,6 +159,9 @@ public class EditorTheme {
         t.linkedEditingInactiveColor = 0x667AA2F7;
         t.bracketHighlightBorderColor = 0xCC9ECE6A;
         t.bracketHighlightBgColor     = 0x2A9ECE6A;
+        t.inlineSuggestionBarBgColor     = 0xF2303030;
+        t.inlineSuggestionBarAcceptColor = 0xFF4FC1FF;
+        t.inlineSuggestionBarDismissColor = 0xFFCCCCCC;
 
         t.defineTextStyle(STYLE_KEYWORD, new TextStyle(0xFF7AA2F7, TextStyle.BOLD));
         t.defineTextStyle(STYLE_STRING, new TextStyle(0xFF9ECE6A, TextStyle.NORMAL));
@@ -202,6 +212,9 @@ public class EditorTheme {
         t.linkedEditingInactiveColor = 0x662563EB;
         t.bracketHighlightBorderColor = 0xCC0F766E;
         t.bracketHighlightBgColor     = 0x260F766E;
+        t.inlineSuggestionBarBgColor     = 0xF2F0F0F0;
+        t.inlineSuggestionBarAcceptColor = 0xFF1A73E8;
+        t.inlineSuggestionBarDismissColor = 0xFF555555;
 
         t.defineTextStyle(STYLE_KEYWORD, new TextStyle(0xFF3559D6, TextStyle.BOLD));
         t.defineTextStyle(STYLE_STRING, new TextStyle(0xFF0F7B6C, TextStyle.NORMAL));

@@ -57,6 +57,9 @@ import com.qiplat.sweeteditor.completion.CompletionPopupController;
 import com.qiplat.sweeteditor.completion.CompletionProvider;
 import com.qiplat.sweeteditor.completion.CompletionProviderManager;
 import com.qiplat.sweeteditor.completion.CompletionContext;
+import com.qiplat.sweeteditor.copilot.InlineSuggestion;
+import com.qiplat.sweeteditor.copilot.InlineSuggestionController;
+import com.qiplat.sweeteditor.copilot.InlineSuggestionListener;
 import com.qiplat.sweeteditor.decoration.DecorationProvider;
 import com.qiplat.sweeteditor.decoration.DecorationProviderManager;
 import com.qiplat.sweeteditor.newline.NewLineAction;
@@ -110,6 +113,7 @@ public class SweetEditor extends View {
     private DecorationProviderManager mDecorationProviderManager;
     private CompletionProviderManager mCompletionProviderManager;
     private CompletionPopupController mCompletionPopupController;
+    private InlineSuggestionController mInlineSuggestionController;
     private NewLineActionProviderManager mNewLineActionProviderManager;
     @Nullable
     private LanguageConfiguration mLanguageConfiguration;
@@ -264,6 +268,12 @@ public class SweetEditor extends View {
                     model.cursor.position.x, model.cursor.position.y, model.cursor.height);
         }
 
+        if (mInlineSuggestionController != null && mInlineSuggestionController.isShowing()
+                && model.cursor != null && model.cursor.position != null) {
+            mInlineSuggestionController.updatePosition(
+                    model.cursor.position.x, model.cursor.position.y, model.cursor.height);
+        }
+
         if (needsTransientRefresh) {
             scheduleTransientScrollbarRefresh(TRANSIENT_SCROLLBAR_REFRESH_MIN_MS);
         } else {
@@ -374,6 +384,10 @@ public class SweetEditor extends View {
         for (Map.Entry<Integer, TextStyle> entry : theme.textStyles.entrySet()) {
             TextStyle style = entry.getValue();
             mEditorCore.registerTextStyle(entry.getKey(), style.color, style.backgroundColor, style.fontStyle);
+        }
+
+        if (mInlineSuggestionController != null) {
+            mInlineSuggestionController.applyTheme(theme);
         }
 
         flush();
@@ -1271,6 +1285,44 @@ public class SweetEditor extends View {
         }
     }
 
+    // ==================== Inline Suggestion (Copilot) API ====================
+
+    /**
+     * Show an inline suggestion: inject phantom text and display accept/dismiss action bar.
+     *
+     * @param suggestion the inline suggestion to display
+     */
+    public void showInlineSuggestion(@NonNull InlineSuggestion suggestion) {
+        if (mInlineSuggestionController != null) {
+            mInlineSuggestionController.show(suggestion);
+        }
+    }
+
+    /**
+     * Dismiss current inline suggestion (clear phantom text and hide action bar).
+     */
+    public void dismissInlineSuggestion() {
+        if (mInlineSuggestionController != null) {
+            mInlineSuggestionController.dismiss();
+        }
+    }
+
+    /**
+     * Check if an inline suggestion action bar is currently showing.
+     */
+    public boolean isInlineSuggestionShowing() {
+        return mInlineSuggestionController != null && mInlineSuggestionController.isShowing();
+    }
+
+    /**
+     * Set listener for inline suggestion accept/dismiss callbacks.
+     */
+    public void setInlineSuggestionListener(@Nullable InlineSuggestionListener listener) {
+        if (mInlineSuggestionController != null) {
+            mInlineSuggestionController.setListener(listener);
+        }
+    }
+
     public void addNewLineActionProvider(@NonNull NewLineActionProvider provider) {
         if (mNewLineActionProviderManager == null) {
             mNewLineActionProviderManager = new NewLineActionProviderManager(this);
@@ -1534,6 +1586,12 @@ public class SweetEditor extends View {
 
     void handleKeyEventFromIME(KeyEvent event) {
         long t0 = ENABLE_PERF_LOG ? System.nanoTime() : 0;
+        // Inline suggestion keyboard interception (Tab/Escape)
+        if (mInlineSuggestionController != null && mInlineSuggestionController.isShowing()) {
+            if (mInlineSuggestionController.handleAndroidKeyCode(event.getKeyCode())) {
+                return;
+            }
+        }
         // Completion panel keyboard interception (Enter/Escape/Up/Down)
         if (mCompletionPopupController != null && mCompletionPopupController.isShowing()) {
             if (mCompletionPopupController.handleAndroidKeyCode(event.getKeyCode())) {
@@ -1654,6 +1712,8 @@ public class SweetEditor extends View {
         mCompletionPopupController = new CompletionPopupController(context, this);
         mCompletionProviderManager.setListener(mCompletionPopupController);
         mCompletionPopupController.setConfirmListener(this::applyCompletionItem);
+
+        mInlineSuggestionController = new InlineSuggestionController(context, this);
 
         for (Map.Entry<Integer, TextStyle> entry : mTheme.textStyles.entrySet()) {
             TextStyle style = entry.getValue();
