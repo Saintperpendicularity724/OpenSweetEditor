@@ -139,7 +139,7 @@ SweetEditor follows a minimal-dependency principle. The core runtime depends onl
 
 Testing uses [Catch2](https://github.com/catchorg/Catch2).
 
-## Documentation
+## 文档
 
 | Document                                                                                                     | Description                                                                          |
 | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
@@ -177,3 +177,13 @@ See [Contributing Guide](docs/en/join.md) for details.
 ## License
 
 SweetEditor is licensed under the [GNU Lesser General Public License v2.1 or later](LICENSE) (LGPL-2.1+), with an additional [Static Linking Exception](EXCEPTION) provided as a supplementary clarification.
+
+## Star History
+
+<a href="https://www.star-history.com/#FinalScave/OpenSweetEditor&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=FinalScave/OpenSweetEditor&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=FinalScave/OpenSweetEditor&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=FinalScave/OpenSweetEditor&type=date&legend=top-left" />
+ </picture>
+</a>
