@@ -29,7 +29,7 @@ import com.qiplat.sweeteditor.perf.PerfStepRecorder;
  * and TextMeasurer. SweetEditor delegates all rendering to this class.
  */
 final class EditorRenderer {
-    private static final float HANDLE_LINE_WIDTH = 2.0f;
+    private static final float HANDLE_LINE_WIDTH = 1.5f;
     private static final float HANDLE_DROP_RADIUS = 10.0f;
     private static final float HANDLE_CENTER_DIST = 24.0f;
 
@@ -739,10 +739,11 @@ final class EditorRenderer {
 
     private void drawCursor(Canvas canvas, @Nullable Cursor cursor, boolean cursorVisible) {
         if (cursor == null || !cursor.visible || !cursorVisible) return;
+        float cursorWidth = HANDLE_LINE_WIDTH * mDensity;
         canvas.drawRect(
                 cursor.position.x,
                 cursor.position.y,
-                cursor.position.x + 2f,
+                cursor.position.x + cursorWidth,
                 cursor.position.y + cursor.height,
                 mCursorPaint
         );
