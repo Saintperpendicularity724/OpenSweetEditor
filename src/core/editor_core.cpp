@@ -131,10 +131,70 @@ namespace NS_SWEETEDITOR {
     LOGD("EditorCore::setViewport, viewport = %s", m_viewport_.dump().c_str());
   }
 
-  void EditorCore::resetMeasurer() {
+  void EditorCore::onFontMetricsChanged() {
+    float old_line_height = m_text_layout_->getLineHeight();
+
+    // ── Anchor-based scroll preservation ──
+    // Before resetting the measurer, find which logical line sits at the
+    // viewport top and what fraction of that line has been scrolled past.
+    // After the font change we recompute scroll_y purely from the integer
+    // anchor_line and the small fraction, avoiding any large-float arithmetic
+    // whose rounding error would diverge from the prefix-sum that
+    // resolveVisibleLines later uses for its binary search.
+    size_t anchor_line = 0;
+    float  anchor_fraction = 0.0f;   // [0,1] intra-line offset
+    float  old_scroll_x = 0.0f;
+
+    if (old_line_height > 0 && m_document_ != nullptr) {
+      const auto& lines = m_document_->getLogicalLines();
+      if (!lines.empty()) {
+        const float scroll_y = m_view_state_.scroll_y;
+        // Binary search: first line whose bottom > scroll_y
+        size_t lo = 0, hi = lines.size();
+        while (lo < hi) {
+          size_t mid = lo + (hi - lo) / 2;
+          float line_y = m_text_layout_->getLineStartY(mid);
+          float h = (lines[mid].height >= 0) ? lines[mid].height : old_line_height;
+          if (line_y + h <= scroll_y) {
+            lo = mid + 1;
+          } else {
+            hi = mid;
+          }
+        }
+        anchor_line = lo < lines.size() ? lo : lines.size() - 1;
+        float anchor_y = m_text_layout_->getLineStartY(anchor_line);
+        float anchor_h = (lines[anchor_line].height >= 0)
+                             ? lines[anchor_line].height
+                             : old_line_height;
+        anchor_fraction = (anchor_h > 0)
+                              ? (scroll_y - anchor_y) / anchor_h
+                              : 0.0f;
+        anchor_fraction = std::max(0.0f, std::min(1.0f, anchor_fraction));
+        old_scroll_x = m_view_state_.scroll_x;
+      }
+    }
+
     m_text_layout_->resetMeasurer();
-    // After font metrics change, all lines must be relaid out (line height, run width, etc. may change)
-    markAllLinesDirty();
+    float new_line_height = m_text_layout_->getLineHeight();
+
+    // All line heights are now invalid and must be relaid out
+    markAllLinesDirty(true);
+
+    // Recompute scroll_y from anchor using the NEW prefix index.
+    // getLineStartY rebuilds the prefix index (which now uses the fixed
+    // multiplication-based computation in ensurePrefixIndexUpTo), so
+    // scroll_y is guaranteed to be consistent with what resolveVisibleLines
+    // will see later.
+    if (old_line_height > 0 && new_line_height > 0 && old_line_height != new_line_height) {
+      float old_scroll_y = m_view_state_.scroll_y;
+      float ratio = new_line_height / old_line_height;
+      float new_anchor_y = m_text_layout_->getLineStartY(anchor_line);
+      m_view_state_.scroll_y = std::round(new_anchor_y + anchor_fraction * new_line_height);
+      m_view_state_.scroll_x = std::round(old_scroll_x * ratio);
+      LOGD("onFontMetricsChanged: old_h=%.4f new_h=%.4f anchor=%zu frac=%.4f old_scroll=%.1f new_scroll=%.1f",
+           old_line_height, new_line_height, anchor_line, anchor_fraction,
+           old_scroll_y, m_view_state_.scroll_y);
+    }
     normalizeScrollState();
   }
 
@@ -640,11 +700,9 @@ namespace NS_SWEETEDITOR {
       break;
     }
     case GestureType::SCALE: {
-      float old_scale = m_view_state_.scale;
       m_view_state_.scale = std::max(1.0f, std::min(m_settings_.max_scale, m_view_state_.scale * result.scale));
-      float scale_ratio = m_view_state_.scale / old_scale;
-      m_view_state_.scroll_y *= scale_ratio;
-      m_view_state_.scroll_x *= scale_ratio;
+      // Don't adjust scroll here — metrics haven't been updated yet.
+      // Platform will call onFontMetricsChanged() which adjusts scroll with accurate line heights.
       break;
     }
     case GestureType::SCROLL:
@@ -670,7 +728,13 @@ namespace NS_SWEETEDITOR {
       m_view_state_.scroll_y = std::round(m_view_state_.scroll_y);
     }
 
-    normalizeScrollState();
+    // For SCALE gestures, skip premature normalize — metrics haven't been updated yet.
+    // Platform will call onFontMetricsChanged() which normalizes with correct metrics.
+    if (result.type == GestureType::SCALE) {
+      m_text_layout_->setViewState(m_view_state_);
+    } else {
+      normalizeScrollState();
+    }
     fillGestureResult(result);
     // Propagate edge-scroll flag for DRAG_SELECT gestures
     if (result.type == GestureType::DRAG_SELECT) {
@@ -3059,10 +3123,17 @@ namespace NS_SWEETEDITOR {
     return edit_result;
   }
 
-  void EditorCore::markAllLinesDirty() {
+  void EditorCore::markAllLinesDirty(bool reset_heights) {
     if (m_document_ == nullptr) return;
-    for (auto& line : m_document_->getLogicalLines()) {
-      line.is_layout_dirty = true;
+    if (reset_heights) {
+      for (auto& line : m_document_->getLogicalLines()) {
+        line.is_layout_dirty = true;
+        line.height = -1;
+      }
+    } else {
+      for (auto& line : m_document_->getLogicalLines()) {
+        line.is_layout_dirty = true;
+      }
     }
     if (m_text_layout_ != nullptr) {
       m_text_layout_->invalidateContentMetrics();

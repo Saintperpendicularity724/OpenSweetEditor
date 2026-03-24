@@ -152,6 +152,10 @@ namespace NS_SWEETEDITOR {
 
     LayoutMetrics& getLayoutMetrics();
 
+    /// Get start y of a logical line via prefix index
+    /// @param line Logical line index
+    float getLineStartY(size_t line);
+
     /// Mark content-size cache as dirty (call after external edits/folding changes)
     /// @param from_line Prefix index becomes dirty starting from this line, default 0 = rebuild all
     void invalidateContentMetrics(size_t from_line = 0);
@@ -200,8 +204,6 @@ namespace NS_SWEETEDITOR {
 
     /// Ensure prefix index covers at least up to line up_to_line (inclusive), rebuilding forward from dirty start as needed
     void ensurePrefixIndexUpTo(size_t up_to_line);
-    /// Get start y of line via prefix index
-    float getLineStartY(size_t line);
     /// Mark prefix index as dirty starting from from_line
     void invalidatePrefixFrom(size_t from_line);
 

@@ -92,8 +92,8 @@ EDITOR_API void set_editor_document(intptr_t editor_handle, intptr_t document_ha
 /// @param height Editor view height
 EDITOR_API void set_editor_viewport(intptr_t editor_handle, int16_t width, int16_t height);
 
-/// Reset editor text measurements (call when font changes)
-EDITOR_API void reset_editor_text_measurer(intptr_t editor_handle);
+/// Notify editor that font metrics have changed (call after font/scale changes)
+EDITOR_API void editor_on_font_metrics_changed(intptr_t editor_handle);
 
 /// Set fold arrow display mode (affects reserved gutter width)
 /// @param mode 0=AUTO(auto show when fold regions exist), 1=ALWAYS(always reserve), 2=HIDDEN(always hide)

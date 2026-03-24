@@ -90,8 +90,8 @@ public class EditorCore implements AutoCloseable {
         EditorNative.setViewport(nativeHandle, width, height);
     }
 
-    public void resetMeasurer() {
-        EditorNative.resetMeasurer(nativeHandle);
+    public void onFontMetricsChanged() {
+        EditorNative.onFontMetricsChanged(nativeHandle);
     }
 
     public void setFoldArrowMode(int mode) {

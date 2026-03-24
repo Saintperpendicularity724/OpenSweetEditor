@@ -914,7 +914,7 @@ public class SweetEditor extends JPanel {
      * updates to make them take effect.
      */
     public void flush() {
-        editorCore.resetMeasurer();
+        editorCore.onFontMetricsChanged();
         renderModel = editorCore.buildRenderModel();
         repaint();
     }

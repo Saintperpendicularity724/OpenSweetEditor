@@ -69,7 +69,7 @@ void     set_editor_document(intptr_t editor_handle, intptr_t document_handle);
 
 ```c
 void set_editor_viewport(intptr_t editor_handle, int16_t width, int16_t height);
-void reset_editor_text_measurer(intptr_t editor_handle);
+void editor_on_font_metrics_changed(intptr_t editor_handle);
 void editor_set_fold_arrow_mode(intptr_t editor_handle, int mode);
 void editor_set_wrap_mode(intptr_t editor_handle, int mode);
 void editor_set_line_spacing(intptr_t editor_handle, float add, float mult);

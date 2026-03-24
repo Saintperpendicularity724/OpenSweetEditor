@@ -1301,8 +1301,8 @@ namespace SweetEditor {
 		[DllImport(LibraryName, EntryPoint = "set_editor_viewport", CallingConvention = CallingConvention.Cdecl)]
 		internal static extern IntPtr SetViewport(IntPtr handle, int width, int height);
 
-		[DllImport(LibraryName, EntryPoint = "reset_editor_text_measurer", CallingConvention = CallingConvention.Cdecl)]
-		internal static extern void ResetEditorTextMeasurer(IntPtr handle);
+		[DllImport(LibraryName, EntryPoint = "editor_on_font_metrics_changed", CallingConvention = CallingConvention.Cdecl)]
+		internal static extern void OnFontMetricsChanged(IntPtr handle);
 
 		[DllImport(LibraryName, EntryPoint = "editor_set_fold_arrow_mode", CallingConvention = CallingConvention.Cdecl)]
 		internal static extern void SetFoldArrowMode(IntPtr handle, int mode);
@@ -1728,9 +1728,9 @@ namespace SweetEditor {
 			NativeMethods.SetViewport(nativeHandle, width, height);
 		}
 
-		/// <summary>Resets the text measurement cache (call after font/DPI changes so the next BuildRenderModel re-measures text).</summary>
-		public void ResetMeasurer() {
-			NativeMethods.ResetEditorTextMeasurer(nativeHandle);
+		/// <summary>Notifies the editor that font metrics have changed (call after font/scale/DPI changes).</summary>
+		public void OnFontMetricsChanged() {
+			NativeMethods.OnFontMetricsChanged(nativeHandle);
 		}
 
 		/// <summary>Sets fold-arrow display mode.</summary>

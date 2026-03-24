@@ -104,11 +104,11 @@ public class EditorCore {
         nativeSetViewport(mNativeHandle, width, height);
     }
 
-    public void resetMeasurer() {
+    public void onFontMetricsChanged() {
         if (mNativeHandle == 0) {
             return;
         }
-        nativeResetMeasurer(mNativeHandle);
+        nativeOnFontMetricsChanged(mNativeHandle);
     }
 
     /**
@@ -1614,7 +1614,7 @@ public class EditorCore {
     private static native void nativeLoadDocument(long handle, long documentHandle);
 
     @CriticalNative
-    private static native void nativeResetMeasurer(long handle);
+    private static native void nativeOnFontMetricsChanged(long handle);
 
     @CriticalNative
     private static native void nativeSetFoldArrowMode(long handle, int mode);

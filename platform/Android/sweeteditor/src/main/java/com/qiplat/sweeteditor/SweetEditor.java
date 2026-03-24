@@ -348,18 +348,18 @@ public class SweetEditor extends View {
 
     void syncPlatformScale(float scale) {
         mRenderer.syncPlatformScale(scale);
-        mEditorCore.resetMeasurer();
+        mEditorCore.onFontMetricsChanged();
     }
 
     void applyTypeface(Typeface typeface) {
         mRenderer.applyTypeface(typeface);
-        mEditorCore.resetMeasurer();
+        mEditorCore.onFontMetricsChanged();
         flush();
     }
 
     void applyTextSize(float textSize) {
         mRenderer.applyTextSize(textSize);
-        mEditorCore.resetMeasurer();
+        mEditorCore.onFontMetricsChanged();
         flush();
     }
 

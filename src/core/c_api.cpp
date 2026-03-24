@@ -573,12 +573,12 @@ void set_editor_viewport(intptr_t editor_handle, int16_t width, int16_t height) 
   editor_core->setViewport({(float)width, (float)height});
 }
 
-void reset_editor_text_measurer(intptr_t editor_handle) {
+void editor_on_font_metrics_changed(intptr_t editor_handle) {
   Ptr<EditorCore> editor_core = getCPtrHolderValue<EditorCore>(editor_handle);
   if (editor_core == nullptr) {
     return;
   }
-  editor_core->resetMeasurer();
+  editor_core->onFontMetricsChanged();
 }
 
 void editor_set_fold_arrow_mode(intptr_t editor_handle, int mode) {

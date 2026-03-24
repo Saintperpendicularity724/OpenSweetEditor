@@ -846,14 +846,39 @@ namespace NS_SWEETEDITOR {
     // invalidatePrefixFrom marks following prefixes dirty.
     const float default_height = getLineHeight();
 
+    // ── Multiplication-based run tracking ──
+    // When consecutive lines share the same height (typically default_height for
+    // unlaid-out lines after markAllLinesDirty), we compute prefix_y as
+    //   run_base_y + run_count * height
+    // instead of repeated addition (prefix[i-1] + height).
+    // This eliminates O(N) float accumulation error that otherwise grows to
+    // ~120 px at line 14000 with non-power-of-two line heights, causing visible
+    // viewport jitter during pinch-to-zoom.
+    float run_base_y = 0.0f;     // prefix_y where the current same-height run started
+    float run_height = 0.0f;     // height value of the current run
+    size_t run_count = 0;        // how many lines of run_height have been accumulated
+
     for (size_t i = start; i <= up_to_line; ++i) {
       if (i == 0) {
         m_line_prefix_y_[0] = 0.0f;
+        // Reset run tracking; line 0's height feeds into line 1
+        run_base_y = 0.0f;
+        run_height = 0.0f;
+        run_count = 0;
       } else {
         const LogicalLine& prev = lines[i - 1];
-        // height < 0 means never laid out; use estimated height
         float h = (prev.height >= 0) ? prev.height : default_height;
-        m_line_prefix_y_[i] = m_line_prefix_y_[i - 1] + h;
+        if (h == run_height && run_count > 0) {
+          // Same height as current run: extend and use multiplication
+          run_count++;
+          m_line_prefix_y_[i] = run_base_y + static_cast<float>(run_count) * run_height;
+        } else {
+          // Height changed: start a new run from the previous prefix value
+          run_base_y = m_line_prefix_y_[i - 1];
+          run_height = h;
+          run_count = 1;
+          m_line_prefix_y_[i] = run_base_y + h;
+        }
       }
     }
 

@@ -194,7 +194,7 @@ namespace NS_SWEETEDITOR {
     void setViewport(const Viewport& viewport);
 
     /// Reset text measurement, usually called when editor font is reset
-    void resetMeasurer();
+    void onFontMetricsChanged();
 
     /// Set auto wrap mode
     /// @param mode WrapMode
@@ -791,7 +791,7 @@ namespace NS_SWEETEDITOR {
     /// Fill current editor state into GestureResult (remove duplicate assignments)
     void fillGestureResult(GestureResult& result) const;
     /// Mark all logical lines as layout dirty
-    void markAllLinesDirty();
+    void markAllLinesDirty(bool reset_heights = false);
     /// Reset composition state (clear composing flag and text)
     void resetCompositionState();
     void normalizeScrollState();

@@ -422,7 +422,7 @@ public final class EditorNative {
     private static final MethodHandle FREE_EDITOR = downcall("free_editor",
             FunctionDescriptor.ofVoid(ValueLayout.JAVA_LONG));
 
-    private static final MethodHandle RESET_MEASURER = downcall("reset_editor_text_measurer",
+    private static final MethodHandle ON_FONT_METRICS_CHANGED = downcall("editor_on_font_metrics_changed",
             FunctionDescriptor.ofVoid(ValueLayout.JAVA_LONG));
 
     private static final MethodHandle HANDLE_KEY_EVENT = downcall("handle_editor_key_event",
@@ -635,9 +635,9 @@ public final class EditorNative {
         });
     }
 
-    public static void resetMeasurer(long handle) {
+    public static void onFontMetricsChanged(long handle) {
         invokeVoid(() -> {
-            RESET_MEASURER.invokeExact(handle);
+            ON_FONT_METRICS_CHANGED.invokeExact(handle);
         });
     }
 

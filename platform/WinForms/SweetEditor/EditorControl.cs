@@ -1045,7 +1045,7 @@ namespace SweetEditor {
 			base.OnHandleCreated(e);
 			if (IsDesignMode() || editorCore == null) return;
 			renderer.RecreateTextGraphics(this);
-			editorCore.ResetMeasurer();
+			editorCore.OnFontMetricsChanged();
 			Flush();
 		}
 
@@ -1537,12 +1537,12 @@ namespace SweetEditor {
 				int dpi = DeviceDpi;
 				if (dpi != lastMeasureDpi) {
 					renderer.RecreateTextGraphics(this);
-					editorCore.ResetMeasurer();
+					editorCore.OnFontMetricsChanged();
 					lastMeasureDpi = dpi;
 				}
 				if (renderer.GetTextGraphics() == null) {
 					renderer.RecreateTextGraphics(this);
-					editorCore.ResetMeasurer();
+					editorCore.OnFontMetricsChanged();
 				}
 				perf.Mark(PerfStepRecorder.StepPrep);
 			}
@@ -1577,7 +1577,7 @@ namespace SweetEditor {
 			renderer.SyncPlatformScale(scale);
 			Font = renderer.RegularFont;
 			if (editorCore != null) {
-				editorCore.ResetMeasurer();
+				editorCore.OnFontMetricsChanged();
 			}
 		}
 

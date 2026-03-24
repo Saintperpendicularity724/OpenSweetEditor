@@ -228,8 +228,8 @@ public:
     return wrapBinaryPayload(env, payload, out_size);
   }
 
-  static void resetMeasurer(jlong handle) {
-    reset_editor_text_measurer(static_cast<intptr_t>(handle));
+  static void onFontMetricsChanged(jlong handle) {
+    editor_on_font_metrics_changed(static_cast<intptr_t>(handle));
   }
 
   static jobject tickEdgeScroll(JNIEnv* env, jclass clazz, jlong handle) {
@@ -821,7 +821,7 @@ public:
       {"nativeLoadDocument", "(JJ)V", (void*) loadDocument},
       {"nativeHandleGestureEvent", "(JII[F)Ljava/nio/ByteBuffer;", (void*) handleGestureEvent},
       {"nativeTickEdgeScroll", "(J)Ljava/nio/ByteBuffer;", (void*) tickEdgeScroll},
-      {"nativeResetMeasurer", "(J)V", (void*) resetMeasurer},
+      {"nativeOnFontMetricsChanged", "(J)V", (void*) onFontMetricsChanged},
       {"nativeBuildRenderModel", "(J)Ljava/nio/ByteBuffer;", (void*) buildRenderModel},
       {"nativeHandleKeyEvent", "(JILjava/lang/String;I)Ljava/nio/ByteBuffer;", (void*) handleKeyEvent},
       {"nativeInsertText", "(JLjava/lang/String;)Ljava/nio/ByteBuffer;", (void*) insertText},
