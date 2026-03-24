@@ -2,6 +2,46 @@ import XCTest
 @testable import SweetEditorDemoSupport
 
 final class DemoSampleSupportTests: XCTestCase {
+    func testFindSharedResourceRootPrefersNearestPlatformResAncestor() throws {
+        let workspace = try makeTemporaryDirectory()
+        let repoRoot = workspace.appendingPathComponent("repo", isDirectory: true)
+        let sourceDir = repoRoot
+            .appendingPathComponent("platform/Apple/Examples-MacOS/Sources/SweetEditorDemoSupport", isDirectory: true)
+        let resRoot = repoRoot.appendingPathComponent("platform/_res", isDirectory: true)
+
+        try FileManager.default.createDirectory(at: sourceDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: resRoot, withIntermediateDirectories: true)
+
+        let resolved = DemoSampleSupport.findSharedResourceRoot(searchStarts: [sourceDir])
+
+        XCTAssertEqual(resolved?.standardizedFileURL, resRoot.standardizedFileURL)
+    }
+
+    func testFindSharedResourceRootSupportsDirectResAncestor() throws {
+        let workspace = try makeTemporaryDirectory()
+        let projectRoot = workspace.appendingPathComponent("demo-project", isDirectory: true)
+        let nestedDir = projectRoot.appendingPathComponent("Examples-MacOS/Sources/SweetEditorDemoSupport", isDirectory: true)
+        let resRoot = projectRoot.appendingPathComponent("_res", isDirectory: true)
+
+        try FileManager.default.createDirectory(at: nestedDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: resRoot, withIntermediateDirectories: true)
+
+        let resolved = DemoSampleSupport.findSharedResourceRoot(searchStarts: [nestedDir])
+
+        XCTAssertEqual(resolved?.standardizedFileURL, resRoot.standardizedFileURL)
+    }
+
+    func testFindSharedResourceRootReturnsNilWhenAncestorsContainNoSharedResources() throws {
+        let workspace = try makeTemporaryDirectory()
+        let sourceDir = workspace.appendingPathComponent("repo/platform/Apple/Examples-MacOS", isDirectory: true)
+
+        try FileManager.default.createDirectory(at: sourceDir, withIntermediateDirectories: true)
+
+        let resolved = DemoSampleSupport.findSharedResourceRoot(searchStarts: [sourceDir])
+
+        XCTAssertNil(resolved)
+    }
+
     func testDiscoverSampleFilesReadsRegularFilesSortedByName() throws {
         let directory = try makeTemporaryDirectory()
         try "class View {}\n".write(to: directory.appendingPathComponent("View.java"), atomically: true, encoding: .utf8)

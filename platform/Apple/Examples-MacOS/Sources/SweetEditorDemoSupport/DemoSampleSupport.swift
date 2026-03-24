@@ -312,14 +312,52 @@ public enum DemoSampleSupport {
     }
 
     private static func sharedSampleDirectories() -> [URL] {
-        let currentFileURL = URL(fileURLWithPath: #filePath)
-        let examplesRoot = currentFileURL
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-        let repoRoot = examplesRoot.deletingLastPathComponent().deletingLastPathComponent()
-        return [repoRoot.appendingPathComponent("platform/_res/files", isDirectory: true)]
+        guard let resourceRoot = findSharedResourceRoot(searchStarts: sharedResourceSearchStarts()) else {
+            return []
+        }
+
+        let filesDirectory = resourceRoot.appendingPathComponent("files", isDirectory: true)
+        return isDirectory(filesDirectory) ? [filesDirectory] : []
+    }
+
+    static func findSharedResourceRoot(searchStarts: [URL]) -> URL? {
+        for start in searchStarts {
+            guard start.isFileURL else { continue }
+            for ancestor in ancestorDirectories(startingAt: start.standardizedFileURL) {
+                for relativePath in ["_res", "platform/_res"] {
+                    let candidate = ancestor.appendingPathComponent(relativePath, isDirectory: true)
+                    if isDirectory(candidate) {
+                        return candidate
+                    }
+                }
+            }
+        }
+        return nil
+    }
+
+    private static func sharedResourceSearchStarts() -> [URL] {
+        let currentFileDirectory = URL(fileURLWithPath: #filePath, isDirectory: false).deletingLastPathComponent()
+        let currentWorkingDirectory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+        let bundleResourceDirectory = Bundle.main.resourceURL
+
+        return [currentWorkingDirectory, currentFileDirectory, bundleResourceDirectory]
+            .compactMap { $0?.standardizedFileURL }
+    }
+
+    private static func ancestorDirectories(startingAt start: URL) -> [URL] {
+        var directories: [URL] = []
+        var current: URL? = start.hasDirectoryPath ? start : start.deletingLastPathComponent()
+
+        while let directory = current {
+            directories.append(directory)
+            let parent = directory.deletingLastPathComponent()
+            if parent == directory {
+                break
+            }
+            current = parent
+        }
+
+        return directories
     }
 
     private static func loadRegularFiles(in directory: URL) -> [DemoSampleFile] {
@@ -340,6 +378,11 @@ public enum DemoSampleSupport {
     private static func isRegularFile(_ url: URL) -> Bool {
         let values = try? url.resourceValues(forKeys: [.isRegularFileKey])
         return values?.isRegularFile == true
+    }
+
+    private static func isDirectory(_ url: URL) -> Bool {
+        let values = try? url.resourceValues(forKeys: [.isDirectoryKey])
+        return values?.isDirectory == true
     }
 
     private static func loadSampleFile(from url: URL) -> DemoSampleFile? {
