@@ -103,6 +103,10 @@ EDITOR_API void editor_set_fold_arrow_mode(intptr_t editor_handle, int mode);
 /// @param mode 0=NONE(no wrap), 1=CHAR_BREAK(character-level wrap), 2=WORD_BREAK(word-level wrap)
 EDITOR_API void editor_set_wrap_mode(intptr_t editor_handle, int mode);
 
+/// Set tab size (number of spaces per tab stop)
+/// @param tab_size Tab size (default 4, minimum 1)
+EDITOR_API void editor_set_tab_size(intptr_t editor_handle, int tab_size);
+
 /// Set editor scale factor
 /// @param scale Scale factor (1.0 = 100%)
 EDITOR_API void editor_set_scale(intptr_t editor_handle, float scale);

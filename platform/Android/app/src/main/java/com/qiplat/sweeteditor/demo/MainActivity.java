@@ -29,6 +29,7 @@ import androidx.core.view.WindowInsetsCompat;
 
 import com.qiplat.sweeteditor.EditorSettings;
 import com.qiplat.sweeteditor.EditorTheme;
+import com.qiplat.sweeteditor.LanguageConfiguration;
 import com.qiplat.sweeteditor.SweetEditor;
 import com.qiplat.sweeteditor.copilot.InlineSuggestion;
 import com.qiplat.sweeteditor.core.Document;

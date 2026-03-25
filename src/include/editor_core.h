@@ -200,6 +200,10 @@ namespace NS_SWEETEDITOR {
     /// @param mode WrapMode
     void setWrapMode(WrapMode mode);
 
+    /// Set tab size (number of spaces per tab stop)
+    /// @param tab_size Tab size (default 4, minimum 1)
+    void setTabSize(uint32_t tab_size);
+
     /// Manually set editor scale factor
     /// @param scale Scale factor
     void setScale(float scale);

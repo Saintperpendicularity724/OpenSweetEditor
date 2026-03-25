@@ -43,6 +43,24 @@ namespace NS_SWEETEDITOR {
     m_wrap_mode_ = mode;
   }
 
+  void TextLayout::setTabSize(uint32_t tab_size) {
+    if (tab_size < 1) tab_size = 1;
+    if (m_tab_size_ != tab_size) {
+      m_tab_size_ = tab_size;
+      m_content_metrics_dirty_ = true;
+      m_prefix_dirty_from_ = 0;
+      if (m_document_ != nullptr) {
+        for (auto& ll : m_document_->getLogicalLines()) {
+          ll.is_layout_dirty = true;
+        }
+      }
+    }
+  }
+
+  uint32_t TextLayout::getTabSize() const {
+    return m_tab_size_;
+  }
+
   void TextLayout::layoutLine(size_t index, LogicalLine& logical_line) {
     // Use prefix index to get line start y, and sync to LogicalLine.start_y (derived cache)
     ensurePrefixIndexUpTo(index);
@@ -209,11 +227,12 @@ namespace NS_SWEETEDITOR {
       click_x = abs_x;
     }
 
-    // If click is left of line start, return column of first TEXT run in this VisualLine
+    // If click is left of line start, return column of first TEXT/TAB run in this VisualLine
     if (click_x <= 0 || vl.runs.empty()) {
       if (!vl.runs.empty()) {
         for (const VisualRun& run : vl.runs) {
-          if (run.type == VisualRunType::TEXT || run.type == VisualRunType::PHANTOM_TEXT) {
+          if (run.type == VisualRunType::TEXT || run.type == VisualRunType::TAB
+              || run.type == VisualRunType::PHANTOM_TEXT) {
             return {hit_line, run.column};
           }
         }
@@ -228,13 +247,21 @@ namespace NS_SWEETEDITOR {
 
       if (run.type == VisualRunType::INLAY_HINT || run.type == VisualRunType::PHANTOM_TEXT
           || run.type == VisualRunType::FOLD_PLACEHOLDER) {
-        // Inlay hint / phantom text / fold placeholder do not occupy source columns; skip
+        run_x = run_right;
+        continue;
+      }
+
+      if (run.type == VisualRunType::TAB) {
+        if (click_x < run_x + run.width * 0.5f) {
+          return {hit_line, run.column};
+        } else if (click_x < run_right) {
+          return {hit_line, run.column + 1};
+        }
         run_x = run_right;
         continue;
       }
 
       if (click_x < run_right || &run == &vl.runs.back()) {
-        // Hit this run; locate character inside run
         if (run.text.empty()) {
           run_x = run_right;
           continue;
@@ -408,21 +435,28 @@ namespace NS_SWEETEDITOR {
         bool found = false;
         float vl_x = 0;
         for (const VisualRun& run : vl.runs) {
-          if (run.type != VisualRunType::TEXT) {
+          if (run.type != VisualRunType::TEXT && run.type != VisualRunType::TAB) {
             vl_x += run.width;
             continue;
           }
           size_t run_end_col = run.column + run.length;
           if (target_col >= run.column && target_col <= run_end_col) {
-            // target_col is inside this run
-            size_t offset_in_run = target_col - run.column;
-            if (offset_in_run > 0) {
-              U16String prefix = run.text.substr(0, offset_in_run);
-              vl_x += measureWidth(prefix, run.style.font_style);
+            if (run.type == VisualRunType::TAB) {
+              if (target_col == run.column) {
+                float screen_x = text_area_x + vl_x - (m_wrap_mode_ == WrapMode::NONE ? scroll_x : 0);
+                float screen_y = vl.line_number_position.y - scroll_y;
+                return {screen_x, screen_y};
+              }
+            } else {
+              size_t offset_in_run = target_col - run.column;
+              if (offset_in_run > 0) {
+                U16String prefix = run.text.substr(0, offset_in_run);
+                vl_x += measureWidth(prefix, run.style.font_style);
+              }
+              float screen_x = text_area_x + vl_x - (m_wrap_mode_ == WrapMode::NONE ? scroll_x : 0);
+              float screen_y = vl.line_number_position.y - scroll_y;
+              return {screen_x, screen_y};
             }
-            float screen_x = text_area_x + vl_x - (m_wrap_mode_ == WrapMode::NONE ? scroll_x : 0);
-            float screen_y = vl.line_number_position.y - scroll_y;
-            return {screen_x, screen_y};
           }
           vl_x += run.width;
         }
@@ -479,33 +513,39 @@ namespace NS_SWEETEDITOR {
     for (const VisualLine& vl : ll.visual_lines) {
       float vl_x = 0;
       for (const VisualRun& run : vl.runs) {
-        if (run.type != VisualRunType::TEXT) {
+        if (run.type != VisualRunType::TEXT && run.type != VisualRunType::TAB) {
           vl_x += run.width;
           continue;
         }
         size_t run_end_col = run.column + run.length;
 
-        // Check whether col_start is in this run
         if (!found_start && safe_start >= run.column && safe_start <= run_end_col) {
-          size_t offset = safe_start - run.column;
-          float prefix_w = 0;
-          if (offset > 0) {
-            U16String prefix = run.text.substr(0, offset);
-            prefix_w = measureWidth(prefix, run.style.font_style);
+          if (run.type == VisualRunType::TAB) {
+            x_start = (safe_start == run.column) ? vl_x : vl_x + run.width;
+          } else {
+            size_t offset = safe_start - run.column;
+            float prefix_w = 0;
+            if (offset > 0) {
+              U16String prefix = run.text.substr(0, offset);
+              prefix_w = measureWidth(prefix, run.style.font_style);
+            }
+            x_start = vl_x + prefix_w;
           }
-          x_start = vl_x + prefix_w;
           found_start = true;
         }
 
-        // Check whether col_end is in this run
         if (!found_end && safe_end >= run.column && safe_end <= run_end_col) {
-          size_t offset = safe_end - run.column;
-          float prefix_w = 0;
-          if (offset > 0) {
-            U16String prefix = run.text.substr(0, offset);
-            prefix_w = measureWidth(prefix, run.style.font_style);
+          if (run.type == VisualRunType::TAB) {
+            x_end = (safe_end == run.column) ? vl_x : vl_x + run.width;
+          } else {
+            size_t offset = safe_end - run.column;
+            float prefix_w = 0;
+            if (offset > 0) {
+              U16String prefix = run.text.substr(0, offset);
+              prefix_w = measureWidth(prefix, run.style.font_style);
+            }
+            x_end = vl_x + prefix_w;
           }
-          x_end = vl_x + prefix_w;
           found_end = true;
         }
 
@@ -547,7 +587,7 @@ namespace NS_SWEETEDITOR {
         size_t safe_col = std::min(col_start, ll.cached_text.length());
         for (const VisualLine& vl : ll.visual_lines) {
           for (const VisualRun& run : vl.runs) {
-            if (run.type == VisualRunType::TEXT &&
+            if ((run.type == VisualRunType::TEXT || run.type == VisualRunType::TAB) &&
                 safe_col >= run.column && safe_col <= run.column + run.length) {
               out_y = vl.line_number_position.y - scroll_y;
               return;
@@ -587,7 +627,7 @@ namespace NS_SWEETEDITOR {
       size_t vl_col_min = SIZE_MAX;
       size_t vl_col_max = 0;
       for (const VisualRun& run : vl.runs) {
-        if (run.type != VisualRunType::TEXT) continue;
+        if (run.type != VisualRunType::TEXT && run.type != VisualRunType::TAB) continue;
         if (run.column < vl_col_min) vl_col_min = run.column;
         size_t run_end = run.column + run.length;
         if (run_end > vl_col_max) vl_col_max = run_end;
@@ -605,31 +645,39 @@ namespace NS_SWEETEDITOR {
       float vl_x = 0;
 
       for (const VisualRun& run : vl.runs) {
-        if (run.type != VisualRunType::TEXT) {
+        if (run.type != VisualRunType::TEXT && run.type != VisualRunType::TAB) {
           vl_x += run.width;
           continue;
         }
         size_t run_end_col = run.column + run.length;
 
         if (!found_start && intersect_start >= run.column && intersect_start <= run_end_col) {
-          size_t offset = intersect_start - run.column;
-          float prefix_w = 0;
-          if (offset > 0) {
-            U16String prefix = run.text.substr(0, offset);
-            prefix_w = measureWidth(prefix, run.style.font_style);
+          if (run.type == VisualRunType::TAB) {
+            x_start = (intersect_start == run.column) ? vl_x : vl_x + run.width;
+          } else {
+            size_t offset = intersect_start - run.column;
+            float prefix_w = 0;
+            if (offset > 0) {
+              U16String prefix = run.text.substr(0, offset);
+              prefix_w = measureWidth(prefix, run.style.font_style);
+            }
+            x_start = vl_x + prefix_w;
           }
-          x_start = vl_x + prefix_w;
           found_start = true;
         }
 
         if (!found_end && intersect_end >= run.column && intersect_end <= run_end_col) {
-          size_t offset = intersect_end - run.column;
-          float prefix_w = 0;
-          if (offset > 0) {
-            U16String prefix = run.text.substr(0, offset);
-            prefix_w = measureWidth(prefix, run.style.font_style);
+          if (run.type == VisualRunType::TAB) {
+            x_end = (intersect_end == run.column) ? vl_x : vl_x + run.width;
+          } else {
+            size_t offset = intersect_end - run.column;
+            float prefix_w = 0;
+            if (offset > 0) {
+              U16String prefix = run.text.substr(0, offset);
+              prefix_w = measureWidth(prefix, run.style.font_style);
+            }
+            x_end = vl_x + prefix_w;
           }
-          x_end = vl_x + prefix_w;
           found_end = true;
         }
 
@@ -1046,14 +1094,56 @@ namespace NS_SWEETEDITOR {
 
     const size_t text_len = line_text.length();
 
-    // If there is no decoration, generate one full TEXT run directly
+    // Helper: split a TEXT run by tab characters, emitting TEXT and TAB runs
+    auto splitTabsInRun = [&](const VisualRun& src_run, size_t& current_column) {
+      const U16String& t = src_run.text;
+      size_t pos = 0;
+      while (pos < t.length()) {
+        size_t tab_pos = t.find(u'\t', pos);
+        if (tab_pos == U16String::npos) tab_pos = t.length();
+        if (tab_pos > pos) {
+          VisualRun text_part;
+          text_part.type = VisualRunType::TEXT;
+          text_part.column = src_run.column + static_cast<uint32_t>(pos);
+          text_part.length = tab_pos - pos;
+          text_part.y = src_run.y;
+          text_part.style = src_run.style;
+          text_part.text = t.substr(pos, tab_pos - pos);
+          text_part.width = measureWidth(text_part.text, text_part.style.font_style);
+          runs.push_back(text_part);
+          current_column += text_part.length;
+        }
+        if (tab_pos < t.length()) {
+          uint32_t spaces = m_tab_size_ - (current_column % m_tab_size_);
+          VisualRun tab_run;
+          tab_run.type = VisualRunType::TAB;
+          tab_run.column = src_run.column + static_cast<uint32_t>(tab_pos);
+          tab_run.length = 1;
+          tab_run.y = src_run.y;
+          tab_run.style = src_run.style;
+          tab_run.width = spaces * m_space_width_;
+          runs.push_back(tab_run);
+          current_column += 1;
+          pos = tab_pos + 1;
+        } else {
+          break;
+        }
+      }
+    };
+
+    // If there is no decoration, generate runs directly (split tabs)
     if (merged_spans.empty() && inlay_hints.empty() && phantom_texts.empty()) {
       VisualRun run = {VisualRunType::TEXT, 0, text_len};
       run.y = start_y;
       run.style.font_style = FONT_STYLE_NORMAL;
       run.text = line_text;
-      run.width = measureWidth(line_text, FONT_STYLE_NORMAL);
-      runs.push_back(run);
+      if (line_text.find(u'\t') != U16String::npos) {
+        size_t col = 0;
+        splitTabsInRun(run, col);
+      } else {
+        run.width = measureWidth(line_text, FONT_STYLE_NORMAL);
+        runs.push_back(run);
+      }
       return;
     }
 
@@ -1166,8 +1256,13 @@ namespace NS_SWEETEDITOR {
         text_run.y = start_y;
         text_run.style = findSpanStyle(seg_start);
         text_run.text = line_text.substr(seg_start, actual_end - seg_start);
-        text_run.width = measureWidth(text_run.text, text_run.style.font_style);
-        runs.push_back(text_run);
+        if (text_run.text.find(u'\t') != U16String::npos) {
+          size_t col = seg_start;
+          splitTabsInRun(text_run, col);
+        } else {
+          text_run.width = measureWidth(text_run.text, text_run.style.font_style);
+          runs.push_back(text_run);
+        }
       }
     }
 
@@ -1213,8 +1308,8 @@ namespace NS_SWEETEDITOR {
       // Set screen x (can be negative; overflow is covered by platform line-number background)
       run.x = text_area_x + run_left - scroll_x;
 
-      // INLAY_HINT is not split
-      if (run.type == VisualRunType::INLAY_HINT) {
+      // INLAY_HINT / TAB: do not split
+      if (run.type == VisualRunType::INLAY_HINT || run.type == VisualRunType::TAB) {
         current_x = run_right;
         ++run_it;
         continue;
@@ -1323,8 +1418,8 @@ namespace NS_SWEETEDITOR {
     for (size_t ri = 0; ri < runs.size(); ++ri) {
       VisualRun& run = runs[ri];
 
-      // For non-TEXT type (INLAY_HINT ICON/TEXT), keep as whole and do not split
-      if (run.type == VisualRunType::INLAY_HINT) {
+      // For non-TEXT type (INLAY_HINT / TAB), keep as whole and do not split
+      if (run.type == VisualRunType::INLAY_HINT || run.type == VisualRunType::TAB) {
         if (current_x + run.width > wrap_width && current_x > 0) {
           // Wrap to next line
           out_lines.push_back(std::move(current_line));

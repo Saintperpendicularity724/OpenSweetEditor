@@ -246,6 +246,7 @@ static void appendScrollbarRect(std::vector<uint8_t>& buffer, const ScrollbarRec
 static void appendScrollbarModel(std::vector<uint8_t>& buffer, const ScrollbarModel& scrollbar) {
   appendBool(buffer, scrollbar.visible);
   appendF32(buffer, scrollbar.alpha);
+  appendBool(buffer, scrollbar.thumb_active);
   appendScrollbarRect(buffer, scrollbar.track);
   appendScrollbarRect(buffer, scrollbar.thumb);
 }
@@ -595,6 +596,14 @@ void editor_set_wrap_mode(intptr_t editor_handle, int mode) {
     return;
   }
   editor_core->setWrapMode(static_cast<WrapMode>(mode));
+}
+
+void editor_set_tab_size(intptr_t editor_handle, int tab_size) {
+  Ptr<EditorCore> editor_core = getCPtrHolderValue<EditorCore>(editor_handle);
+  if (editor_core == nullptr) {
+    return;
+  }
+  editor_core->setTabSize(static_cast<uint32_t>(tab_size));
 }
 
 void editor_set_scale(intptr_t editor_handle, float scale) {

@@ -67,6 +67,10 @@ namespace NS_SWEETEDITOR {
       return "INLAY_HINT";
     case VisualRunType::PHANTOM_TEXT:
       return "PHANTOM_TEXT";
+    case VisualRunType::FOLD_PLACEHOLDER:
+      return "FOLD_PLACEHOLDER";
+    case VisualRunType::TAB:
+      return "TAB";
     default:
       return "UNDEFINED";
     }

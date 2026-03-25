@@ -86,6 +86,10 @@ namespace NS_SWEETEDITOR {
 
     void setWrapMode(WrapMode mode);
 
+    void setTabSize(uint32_t tab_size);
+
+    uint32_t getTabSize() const;
+
     void layoutLine(size_t index, LogicalLine& logical_line);
 
     void layoutVisibleLines(EditorRenderModel& model);
@@ -170,6 +174,7 @@ namespace NS_SWEETEDITOR {
     bool m_is_monospace_ {true};
     float m_number_width_;
     float m_space_width_;
+    uint32_t m_tab_size_ {4};
     // Text width measurement cache (key = text + font_style pair)
     struct TextWidthKey {
       U16String text;

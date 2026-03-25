@@ -650,6 +650,10 @@ public:
     editor_set_wrap_mode(static_cast<intptr_t>(handle), static_cast<int>(mode));
   }
 
+  static void setTabSize(jlong handle, jint tab_size) {
+    editor_set_tab_size(static_cast<intptr_t>(handle), static_cast<int>(tab_size));
+  }
+
   static void setScale(jlong handle, jfloat scale) {
     Ptr<EditorCore> editor_core = getCPtrHolderValue<EditorCore>(handle);
     if (editor_core == nullptr) return;
@@ -886,6 +890,7 @@ public:
       {"nativeSetMaxGutterIcons", "(JI)V", (void*) setMaxGutterIcons},
       {"nativeSetFoldArrowMode", "(JI)V", (void*) setFoldArrowMode},
       {"nativeSetWrapMode", "(JI)V", (void*) setWrapMode},
+      {"nativeSetTabSize", "(JI)V", (void*) setTabSize},
       {"nativeSetScale", "(JF)V", (void*) setScale},
       {"nativeSetLineSpacing", "(JFF)V", (void*) setLineSpacing},
       {"nativeSetContentStartPadding", "(JF)V", (void*) setContentStartPadding},

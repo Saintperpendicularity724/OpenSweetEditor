@@ -204,6 +204,11 @@ namespace NS_SWEETEDITOR {
     normalizeScrollState();
   }
 
+  void EditorCore::setTabSize(uint32_t tab_size) {
+    m_text_layout_->setTabSize(tab_size);
+    normalizeScrollState();
+  }
+
   void EditorCore::setScale(float scale) {
     m_view_state_.scale = scale;
     normalizeScrollState();
@@ -368,6 +373,7 @@ namespace NS_SWEETEDITOR {
     if (show_vertical && vertical_track_height > 0.0f) {
       vertical.visible = true;
       vertical.alpha = vertical_alpha;
+      vertical.thumb_active = (m_dragging_scrollbar_ == ScrollbarDragTarget::VERTICAL);
       vertical.track.origin = {vertical_track_x, 0.0f};
       vertical.track.width = scrollbar_thickness;
       vertical.track.height = vertical_track_height;
@@ -392,6 +398,7 @@ namespace NS_SWEETEDITOR {
     if (show_horizontal && horizontal_track_width > 0.0f && horizontal_track_y >= 0.0f) {
       horizontal.visible = true;
       horizontal.alpha = horizontal_alpha;
+      horizontal.thumb_active = (m_dragging_scrollbar_ == ScrollbarDragTarget::HORIZONTAL);
       horizontal.track.origin = {horizontal_track_x, horizontal_track_y};
       horizontal.track.width = horizontal_track_width;
       horizontal.track.height = scrollbar_thickness;

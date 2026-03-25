@@ -532,14 +532,19 @@ ScrollbarThumbActiveColor = Color.FromArgb(unchecked((int)0xEE6A9AD0)),
 		/// <summary>Sets language configuration.</summary>
 		public void SetLanguageConfiguration(LanguageConfiguration? config) {
 			languageConfiguration = config;
-			if (config != null && config.Brackets.Count > 0) {
-				int[] opens = new int[config.Brackets.Count];
-				int[] closes = new int[config.Brackets.Count];
-				for (int i = 0; i < config.Brackets.Count; i++) {
-					opens[i] = string.IsNullOrEmpty(config.Brackets[i].Open) ? 0 : char.ConvertToUtf32(config.Brackets[i].Open, 0);
-					closes[i] = string.IsNullOrEmpty(config.Brackets[i].Close) ? 0 : char.ConvertToUtf32(config.Brackets[i].Close, 0);
+			if (config != null) {
+				if (config.Brackets.Count > 0) {
+					int[] opens = new int[config.Brackets.Count];
+					int[] closes = new int[config.Brackets.Count];
+					for (int i = 0; i < config.Brackets.Count; i++) {
+						opens[i] = string.IsNullOrEmpty(config.Brackets[i].Open) ? 0 : char.ConvertToUtf32(config.Brackets[i].Open, 0);
+						closes[i] = string.IsNullOrEmpty(config.Brackets[i].Close) ? 0 : char.ConvertToUtf32(config.Brackets[i].Close, 0);
+					}
+					editorCore.SetBracketPairs(opens, closes);
 				}
-				editorCore.SetBracketPairs(opens, closes);
+				if (config.TabSize.HasValue && config.TabSize.Value > 0) {
+					editorCore.SetTabSize(config.TabSize.Value);
+				}
 			}
 		}
 

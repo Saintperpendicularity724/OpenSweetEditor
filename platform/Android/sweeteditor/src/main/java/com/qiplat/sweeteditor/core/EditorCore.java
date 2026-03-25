@@ -132,6 +132,16 @@ public class EditorCore {
     }
 
     /**
+     * Sets the tab size (number of spaces per tab stop).
+     *
+     * @param tabSize tab size (default 4, minimum 1)
+     */
+    public void setTabSize(int tabSize) {
+        if (mNativeHandle == 0) return;
+        nativeSetTabSize(mNativeHandle, tabSize);
+    }
+
+    /**
      * Sets the editor scale factor.
      *
      * @param scale scale factor (1.0 = 100%)
@@ -1621,6 +1631,9 @@ public class EditorCore {
 
     @CriticalNative
     private static native void nativeSetWrapMode(long handle, int mode);
+
+    @CriticalNative
+    private static native void nativeSetTabSize(long handle, int tabSize);
 
     @CriticalNative
     private static native void nativeSetScale(long handle, float scale);

@@ -102,6 +102,10 @@ public class EditorCore implements AutoCloseable {
         EditorNative.setWrapMode(nativeHandle, mode);
     }
 
+    public void setTabSize(int tabSize) {
+        EditorNative.setTabSize(nativeHandle, tabSize);
+    }
+
     public void setScale(float scale) {
         EditorNative.setScale(nativeHandle, scale);
     }

@@ -343,16 +343,21 @@ public class SweetEditor extends JPanel {
 
     public void setLanguageConfiguration(LanguageConfiguration config) {
         this.languageConfiguration = config;
-        if (config != null && !config.getBrackets().isEmpty()) {
-            int size = config.getBrackets().size();
-            int[] opens = new int[size];
-            int[] closes = new int[size];
-            for (int i = 0; i < size; i++) {
-                LanguageConfiguration.BracketPair pair = config.getBrackets().get(i);
-                opens[i] = pair.open.isEmpty() ? 0 : pair.open.codePointAt(0);
-                closes[i] = pair.close.isEmpty() ? 0 : pair.close.codePointAt(0);
+        if (config != null) {
+            if (!config.getBrackets().isEmpty()) {
+                int size = config.getBrackets().size();
+                int[] opens = new int[size];
+                int[] closes = new int[size];
+                for (int i = 0; i < size; i++) {
+                    LanguageConfiguration.BracketPair pair = config.getBrackets().get(i);
+                    opens[i] = pair.open.isEmpty() ? 0 : pair.open.codePointAt(0);
+                    closes[i] = pair.close.isEmpty() ? 0 : pair.close.codePointAt(0);
+                }
+                editorCore.setBracketPairs(opens, closes);
             }
-            editorCore.setBracketPairs(opens, closes);
+            if (config.getTabSize() != null && config.getTabSize() > 0) {
+                editorCore.setTabSize(config.getTabSize());
+            }
         }
     }
     public LanguageConfiguration getLanguageConfiguration() { return languageConfiguration; }

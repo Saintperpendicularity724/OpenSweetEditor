@@ -513,6 +513,9 @@ public final class EditorNative {
     private static final MethodHandle SET_WRAP_MODE = downcall("editor_set_wrap_mode",
             FunctionDescriptor.ofVoid(ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT));
 
+    private static final MethodHandle SET_TAB_SIZE = downcall("editor_set_tab_size",
+            FunctionDescriptor.ofVoid(ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT));
+
     private static final MethodHandle SET_SCALE = downcall("editor_set_scale",
             FunctionDescriptor.ofVoid(ValueLayout.JAVA_LONG, ValueLayout.JAVA_FLOAT));
 
@@ -650,6 +653,12 @@ public final class EditorNative {
     public static void setWrapMode(long handle, int mode) {
         invokeVoid(() -> {
             SET_WRAP_MODE.invokeExact(handle, mode);
+        });
+    }
+
+    public static void setTabSize(long handle, int tabSize) {
+        invokeVoid(() -> {
+            SET_TAB_SIZE.invokeExact(handle, tabSize);
         });
     }
 

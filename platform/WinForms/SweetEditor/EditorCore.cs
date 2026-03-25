@@ -609,7 +609,9 @@ namespace SweetEditor {
 		/// <summary>Ghost text (used for Copilot code suggestions).</summary>
 		PHANTOM_TEXT,
 		/// <summary>Fold placeholder (" ... " at the end of the first line of a folded region).</summary>
-		FOLD_PLACEHOLDER
+		FOLD_PLACEHOLDER,
+		/// <summary>Tab character (width computed by core based on tab_size and column position).</summary>
+		TAB
 	}
 
 	/// <summary>
@@ -1313,6 +1315,9 @@ namespace SweetEditor {
 		[DllImport(LibraryName, EntryPoint = "editor_set_wrap_mode", CallingConvention = CallingConvention.Cdecl)]
 		internal static extern void SetWrapMode(IntPtr handle, int mode);
 
+		[DllImport(LibraryName, EntryPoint = "editor_set_tab_size", CallingConvention = CallingConvention.Cdecl)]
+		internal static extern void SetTabSize(IntPtr handle, int tabSize);
+
 		[DllImport(LibraryName, EntryPoint = "editor_set_scale", CallingConvention = CallingConvention.Cdecl)]
 		internal static extern void SetScale(IntPtr handle, float scale);
 
@@ -1746,6 +1751,12 @@ namespace SweetEditor {
 		/// <param name="mode">Mode value (0=NONE, 1=CHAR_BREAK, 2=WORD_BREAK)</param>
 		public void SetWrapMode(int mode) {
 			NativeMethods.SetWrapMode(nativeHandle, mode);
+		}
+
+		/// <summary>Sets tab size (number of spaces per tab stop).</summary>
+		/// <param name="tabSize">Tab size (default 4, minimum 1).</param>
+		public void SetTabSize(int tabSize) {
+			NativeMethods.SetTabSize(nativeHandle, tabSize);
 		}
 
 		/// <summary>Sets editor scale factor.</summary>
