@@ -123,21 +123,28 @@ public void flush()
 
 ### 补全触发规则
 
-- 手动触发：`triggerCompletion()` 走 `CompletionContext.TriggerKind.INVOKED`。
-- 快捷键触发：`Ctrl + Space` 最终会调用 `triggerCompletion()`，同样走 `INVOKED`。
-- 自动触发入口在文本变更分发（`dispatchTextChanged`）中，且**联动编辑模式**下会跳过自动补全触发。
-- 当主变更是单字符输入时：
-  - 若字符命中任一 Provider 的 trigger character，触发 `CHARACTER`，并携带 `triggerCharacter`。
-  - 若补全面板当前已显示，触发 `RETRIGGER`。
-  - 若字符是字母/数字/`_`，触发 `INVOKED`。
-- 当主变更不是单字符输入时：
-  - 若补全面板当前已显示，触发 `RETRIGGER`。
-- Completion Manager 内置防抖：
-  - `INVOKED`：0ms（立即触发）
-  - `CHARACTER` / `RETRIGGER`：50ms
-- 面板交互补充：
-  - 键盘：`Up/Down` 切换、`Enter` 确认、`Escape` 关闭。
-  - 手势：`TAP` 或 `SCROLL` 会关闭当前补全面板。
+| 入口 | 触发方式 | TriggerKind | 说明 |
+| --- | --- | --- | --- |
+| 手动调用 | `triggerCompletion()` | `INVOKED` | 直接请求补全 |
+| 快捷键 | `Ctrl + Space` | `INVOKED` | 最终同样调用 `triggerCompletion()` |
+| 自动触发入口 | `dispatchTextChanged` | 见下表 | 按优先级短路判断 |
+
+自动触发优先级（短路顺序，命中即停止）：
+
+| 顺序 | 条件 | TriggerKind | 额外信息 |
+| --- | --- | --- | --- |
+| 1 | `isInLinkedEditing()==true` | 不触发 | 联动编辑模式跳过自动补全 |
+| 2 | 主变更为单字符，且命中任一 Provider 的 trigger character | `CHARACTER` | 透传 `triggerCharacter` |
+| 3 | 主变更为单字符，且补全面板已显示 | `RETRIGGER` | 面板已开时重触发 |
+| 4 | 主变更为单字符，且字符为字母/数字/`_` | `INVOKED` | 常规字符输入触发 |
+| 5 | 主变更非单字符，且补全面板已显示 | `RETRIGGER` | 非单字符变更时仅在面板已显示下重触发 |
+
+| 规则类型 | 条件 | 行为 |
+| --- | --- | --- |
+| 防抖 | `INVOKED` | 0ms（立即触发） |
+| 防抖 | `CHARACTER` / `RETRIGGER` | 50ms |
+| 键盘交互 | `Up/Down` / `Enter` / `Escape` | 切换候选 / 确认 / 关闭 |
+| 手势交互 | `TAP` 或 `SCROLL` | 关闭当前补全面板 |
 
 ### 性能调试
 
@@ -148,24 +155,32 @@ public boolean isPerfOverlayEnabled()
 
 `setPerfOverlayEnabled(true)` 后，会在编辑区**左上角**显示实时性能面板（默认关闭，仅建议调试使用）。
 
-面板内容（当前实现）：
+> 实现细节说明（v0.0.2 当前实现）：以下字段名、阈值和步骤名用于调试展示，不属于稳定 API 契约；版本升级后请以代码与发布说明为准。
 
-- `FPS`
-- `Frame: total/build/draw`
-  - 当 `total > 16.6ms` 时标记 `SLOW`
-- `Step: ...`
-  - 渲染分阶段耗时（如 `clear/current/selection/lines/guides/comp/diag/linked/bracket/cursor/handles/gutter/scrollbars`）
-  - 单步骤耗时 `>= 2ms` 会追加 `!`
-- `measure{...}`
-  - 文本测量统计（text/inlay/icon 调用次数、总耗时、最大耗时及部分上下文）
-- `Input[tag]: ...`
-  - 最近一次输入路径耗时（如 `touch`、`key`、`ime-update`、`ime-commit`）
-  - 输入耗时 `> 3ms` 标记 `SLOW`
+面板字段（当前实现）：
 
-与日志相关的阈值（当前实现）：
+| 字段标签 | 含义 |
+| --- | --- |
+| `FPS` | 实时帧率 |
+| `Frame: total/build/draw` | 单帧总耗时、build 耗时、draw 耗时 |
+| `Step: ...` | 分阶段渲染耗时 |
+| `measure{...}` | text/inlay/icon 测量统计 |
+| `Input[tag]: ...` | 最近输入路径耗时 |
 
-- 输入慢路径：`>= 3ms` 会输出 `[PERF][SLOW]` 输入日志
-- build 慢路径：`>= 8ms` 或测量统计达到阈值，会周期输出 `[PERF][Build]` 日志（默认每 60 帧检查一次）
+可视标记阈值（当前实现）：
+
+| 维度 | 条件 | 面板标记 |
+| --- | --- | --- |
+| 慢帧 | `total > 16.6ms` | `Frame` 行追加 `SLOW` |
+| 慢渲染步骤 | 单步骤耗时 `>= 2ms` | 该步骤追加 `!` |
+| 慢输入路径 | 输入耗时 `> 3ms` | `Input` 行追加 `SLOW` |
+
+日志阈值（当前实现）：
+
+| 日志类别 | 条件 | 输出说明 |
+| --- | --- | --- |
+| `[PERF][SLOW]` 输入日志 | 输入慢路径 `>= 3ms` | 记录慢输入路径 |
+| `[PERF][Build]` 日志 | build `>= 8ms` 或测量统计达到阈值 | 周期输出，默认每 60 帧检查一次 |
 
 ### 样式 / 装饰 / 折叠 / 联动编辑
 
@@ -250,4 +265,3 @@ public int getCharIndexFromPosition(TextPosition position)
 - `SeparatorStyle`
 
 字体位标志常量：`com.qiplat.sweeteditor.core.FontStyle`。
-
