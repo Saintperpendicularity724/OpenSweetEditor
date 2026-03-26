@@ -1519,6 +1519,9 @@ namespace SweetEditor {
 		[DllImport(LibraryName, EntryPoint = "editor_register_text_style", CallingConvention = CallingConvention.Cdecl)]
 		internal static extern void registerTextStyle(IntPtr handle, uint styleId, int color, int backgroundColor, int fontStyle);
 
+		[DllImport(LibraryName, EntryPoint = "editor_register_batch_text_styles", CallingConvention = CallingConvention.Cdecl)]
+		internal static extern void registerBatchTextStyles(IntPtr handle, byte[] data, nuint size);
+
 		[DllImport(LibraryName, EntryPoint = "editor_set_line_spans", CallingConvention = CallingConvention.Cdecl)]
 		internal static extern void SetLineSpans(IntPtr handle, byte[] data, nuint size);
 
@@ -2274,6 +2277,21 @@ namespace SweetEditor {
 			NativeMethods.registerTextStyle(nativeHandle, styleId, color, 0, fontStyle);
 		}
 
+		/// <summary>Registers multiple highlight styles in one native call.</summary>
+		/// <param name="stylesById">Style definitions keyed by style ID.</param>
+		public void registerBatchTextStyles(IReadOnlyDictionary<uint, TextStyle> stylesById) {
+			if (stylesById == null || stylesById.Count == 0) {
+				return;
+			}
+
+			byte[] payload = ProtocolEncoder.PackBatchTextStyles(stylesById);
+			if (payload.Length == 0) {
+				return;
+			}
+
+			NativeMethods.registerBatchTextStyles(nativeHandle, payload, (nuint)payload.Length);
+		}
+
 		/// <summary>Sets highlight spans for the specified line (model overload).</summary>
 		public void SetLineSpans(int line, int layer, IList<StyleSpan> spans) {
 			if (spans == null) return;
@@ -2637,4 +2655,3 @@ namespace SweetEditor {
 
 	}
 }
-

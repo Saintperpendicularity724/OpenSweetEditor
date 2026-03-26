@@ -498,9 +498,7 @@ ScrollbarThumbActiveColor = Color.FromArgb(unchecked((int)0xEE6A9AD0)),
 			this.ForeColor = currentTheme.TextColor;
 
 			if (editorCore != null) {
-				foreach (var kvp in theme.TextStyles) {
-					editorCore.registerTextStyle(kvp.Key, kvp.Value.Color, kvp.Value.BackgroundColor, kvp.Value.FontStyle);
-				}
+				editorCore.registerBatchTextStyles(theme.TextStyles);
 			}
 
 			completionPopupController?.ApplyTheme(theme);
@@ -781,6 +779,11 @@ ScrollbarThumbActiveColor = Color.FromArgb(unchecked((int)0xEE6A9AD0)),
 		/// <param name="fontStyle">Font style flags.</param>
 		public void registerTextStyle(uint styleId, int color, int backgroundColor, int fontStyle) =>
 			editorCore.registerTextStyle(styleId, color, backgroundColor, fontStyle);
+
+		/// <summary>Register multiple styles in one batch call.</summary>
+		/// <param name="stylesById">Style definitions keyed by style identifier.</param>
+		public void registerBatchTextStyles(IReadOnlyDictionary<uint, TextStyle> stylesById) =>
+			editorCore.registerBatchTextStyles(stylesById);
 
 		/// <summary>Register style.</summary>
 		/// <param name="styleId">Style identifier.</param>
@@ -1064,9 +1067,7 @@ ScrollbarThumbActiveColor = Color.FromArgb(unchecked((int)0xEE6A9AD0)),
 			completionPopupController.OnConfirmed += ApplyCompletionItem;
 
 			// Register default theme text styles.
-			foreach (var kvp in currentTheme.TextStyles) {
-				editorCore.registerTextStyle(kvp.Key, kvp.Value.Color, kvp.Value.BackgroundColor, kvp.Value.FontStyle);
-			}
+			editorCore.registerBatchTextStyles(currentTheme.TextStyles);
 
 			settings = new EditorSettings(this);
 			settings.SetContentStartPadding(DpToPx(DefaultContentStartPaddingDp));
@@ -1645,4 +1646,3 @@ ScrollbarThumbActiveColor = Color.FromArgb(unchecked((int)0xEE6A9AD0)),
 		#endregion
 	}
 }
-
