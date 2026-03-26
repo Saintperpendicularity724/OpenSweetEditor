@@ -1,7 +1,10 @@
 package com.qiplat.sweeteditor.completion;
 
+import com.qiplat.sweeteditor.EditorTheme;
+
 import javax.swing.*;
 import java.awt.*;
+import java.awt.geom.RoundRectangle2D;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -16,9 +19,15 @@ public class CompletionPopupController implements CompletionProviderManager.Comp
     }
 
     private static final int MAX_VISIBLE_ITEMS = 6;
-    private static final int ITEM_HEIGHT = 24;
+    private static final int ITEM_HEIGHT = 30;
     private static final int POPUP_WIDTH = 300;
     private static final int GAP = 4;
+
+    private Color panelBg;
+    private Color panelBorder;
+    private Color selectedBg;
+    private Color labelColor;
+    private Color detailColor;
 
     private final JComponent anchorComponent;
     private CompletionConfirmListener confirmListener;
@@ -30,13 +39,35 @@ public class CompletionPopupController implements CompletionProviderManager.Comp
     private final List<CompletionItem> items = new ArrayList<>();
     private int selectedIndex = 0;
 
-    // Cached cursor coordinates (component-relative), used for popup positioning
     private float cachedCursorX;
     private float cachedCursorY;
     private float cachedCursorHeight;
 
-    public CompletionPopupController(JComponent anchorComponent) {
+    public CompletionPopupController(JComponent anchorComponent, EditorTheme theme) {
         this.anchorComponent = anchorComponent;
+        applyThemeColors(theme);
+    }
+
+    public void applyTheme(EditorTheme theme) {
+        applyThemeColors(theme);
+        if (popupWindow != null) {
+            popupWindow.getContentPane().setBackground(panelBg);
+            if (list != null) {
+                list.setBackground(panelBg);
+                if (list.getCellRenderer() instanceof DefaultCompletionCellRenderer dcr) {
+                    dcr.updateColors(panelBg, selectedBg, labelColor, detailColor);
+                }
+                list.repaint();
+            }
+        }
+    }
+
+    private void applyThemeColors(EditorTheme theme) {
+        panelBg = theme.completionBgColor;
+        panelBorder = theme.completionBorderColor;
+        selectedBg = theme.completionSelectedBgColor;
+        labelColor = theme.completionLabelColor;
+        detailColor = theme.completionDetailColor;
     }
 
     public void setConfirmListener(CompletionConfirmListener listener) {
@@ -68,8 +99,6 @@ public class CompletionPopupController implements CompletionProviderManager.Comp
         }
     }
 
-    // ==================== CompletionUpdateListener ====================
-
     @Override
     public void onCompletionItemsUpdated(List<CompletionItem> newItems) {
         items.clear();
@@ -93,8 +122,6 @@ public class CompletionPopupController implements CompletionProviderManager.Comp
         dismiss();
     }
 
-    // ==================== Keyboard Navigation ====================
-
     /**
      * Handle mapped native keyCode.
      * Enter=13, Escape=27, Up=38, Down=40
@@ -102,19 +129,19 @@ public class CompletionPopupController implements CompletionProviderManager.Comp
     public boolean handleKeyDown(int keyCode) {
         if (!isShowing() || items.isEmpty()) return false;
 
-        if (keyCode == 13) { // Enter
+        if (keyCode == 13) {
             confirmSelected();
             return true;
         }
-        if (keyCode == 27) { // Escape
+        if (keyCode == 27) {
             dismiss();
             return true;
         }
-        if (keyCode == 38) { // Up
+        if (keyCode == 38) {
             moveSelection(-1);
             return true;
         }
-        if (keyCode == 40) { // Down
+        if (keyCode == 40) {
             moveSelection(1);
             return true;
         }
@@ -144,8 +171,6 @@ public class CompletionPopupController implements CompletionProviderManager.Comp
         }
     }
 
-    // ==================== Panel Positioning ====================
-
     public void updatePosition(float cursorX, float cursorY, float cursorHeight) {
         if (!isShowing()) return;
         cachedCursorX = cursorX;
@@ -160,8 +185,6 @@ public class CompletionPopupController implements CompletionProviderManager.Comp
         }
     }
 
-    // ==================== Internal Implementation ====================
-
     private void ensurePopupInitialized() {
         if (popupWindow != null) return;
         Window ancestor = SwingUtilities.getWindowAncestor(anchorComponent);
@@ -174,10 +197,9 @@ public class CompletionPopupController implements CompletionProviderManager.Comp
         list = new JList<>(listModel);
         list.setFixedCellHeight(ITEM_HEIGHT);
         list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        list.setBackground(new Color(0xF5, 0xF5, 0xF5));
-        list.setCellRenderer(new DefaultCompletionCellRenderer());
+        list.setBackground(panelBg);
+        list.setCellRenderer(new DefaultCompletionCellRenderer(panelBg, selectedBg, labelColor, detailColor));
 
-        // If custom renderer is already set, apply immediately
         if (cellRenderer != null) {
             list.setCellRenderer((jList, value, index, isSelected, cellHasFocus) ->
                     cellRenderer.getCompletionCellRendererComponent(jList, value, index, isSelected));
@@ -195,7 +217,10 @@ public class CompletionPopupController implements CompletionProviderManager.Comp
         });
 
         JScrollPane scrollPane = new JScrollPane(list);
-        scrollPane.setBorder(BorderFactory.createLineBorder(Color.GRAY));
+        scrollPane.setBorder(BorderFactory.createLineBorder(panelBorder));
+        scrollPane.getViewport().setBackground(panelBg);
+        scrollPane.setBackground(panelBg);
+        popupWindow.getContentPane().setBackground(panelBg);
         popupWindow.getContentPane().add(scrollPane);
     }
 
@@ -216,13 +241,11 @@ public class CompletionPopupController implements CompletionProviderManager.Comp
         int x = screenPos.x + (int) cachedCursorX;
         int y = screenPos.y + (int) (cachedCursorY + cachedCursorHeight + GAP);
 
-            // Flip above if insufficient space below
         int popupHeight = popupWindow.getHeight();
         Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
         if (y + popupHeight > screenSize.height) {
             y = screenPos.y + (int) cachedCursorY - popupHeight - GAP;
         }
-            // Prevent right edge overflow
         if (x + POPUP_WIDTH > screenSize.width) {
             x = screenSize.width - POPUP_WIDTH;
         }
@@ -251,35 +274,141 @@ public class CompletionPopupController implements CompletionProviderManager.Comp
         }
     }
 
-    // ==================== Default Renderer ====================
+    private static Color kindColor(int kind) {
+        switch (kind) {
+            case CompletionItem.KIND_KEYWORD:   return new Color(0xC6, 0x78, 0xDD);
+            case CompletionItem.KIND_FUNCTION:  return new Color(0x61, 0xAF, 0xEF);
+            case CompletionItem.KIND_VARIABLE:  return new Color(0xE5, 0xC0, 0x7B);
+            case CompletionItem.KIND_CLASS:     return new Color(0xE0, 0x6C, 0x75);
+            case CompletionItem.KIND_INTERFACE: return new Color(0x56, 0xB6, 0xC2);
+            case CompletionItem.KIND_MODULE:    return new Color(0xD1, 0x9A, 0x66);
+            case CompletionItem.KIND_PROPERTY:  return new Color(0x98, 0xC3, 0x79);
+            case CompletionItem.KIND_SNIPPET:   return new Color(0xBE, 0x50, 0x46);
+            default:                            return new Color(0x7A, 0x84, 0x94);
+        }
+    }
+
+    private static String kindLetter(int kind) {
+        switch (kind) {
+            case CompletionItem.KIND_KEYWORD:   return "K";
+            case CompletionItem.KIND_FUNCTION:  return "F";
+            case CompletionItem.KIND_VARIABLE:  return "V";
+            case CompletionItem.KIND_CLASS:     return "C";
+            case CompletionItem.KIND_INTERFACE: return "I";
+            case CompletionItem.KIND_MODULE:    return "M";
+            case CompletionItem.KIND_PROPERTY:  return "P";
+            case CompletionItem.KIND_SNIPPET:   return "S";
+            default:                            return "T";
+        }
+    }
 
     private static class DefaultCompletionCellRenderer extends JPanel implements ListCellRenderer<CompletionItem> {
-        private final JLabel labelView = new JLabel();
-        private final JLabel detailView = new JLabel();
+        private CompletionItem currentItem;
+        private boolean currentSelected;
 
-        DefaultCompletionCellRenderer() {
-            setLayout(new BorderLayout(8, 0));
-            setBorder(BorderFactory.createEmptyBorder(2, 6, 2, 6));
-            labelView.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-            detailView.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 10));
-            detailView.setForeground(Color.GRAY);
-            add(labelView, BorderLayout.CENTER);
-            add(detailView, BorderLayout.EAST);
+        private static final Font LABEL_FONT = new Font(Font.MONOSPACED, Font.PLAIN, 12);
+        private static final Font DETAIL_FONT = new Font(Font.SANS_SERIF, Font.PLAIN, 10);
+        private static final Font BADGE_FONT = new Font(Font.SANS_SERIF, Font.BOLD, 10);
+        private static final int BADGE_SIZE = 18;
+        private static final int BADGE_ARC = 6;
+
+        private Color bgColor;
+        private Color selColor;
+        private Color lblColor;
+        private Color dtlColor;
+
+        DefaultCompletionCellRenderer(Color bgColor, Color selColor, Color lblColor, Color dtlColor) {
+            setOpaque(true);
+            this.bgColor = bgColor;
+            this.selColor = selColor;
+            this.lblColor = lblColor;
+            this.dtlColor = dtlColor;
+        }
+
+        void updateColors(Color bgColor, Color selColor, Color lblColor, Color dtlColor) {
+            this.bgColor = bgColor;
+            this.selColor = selColor;
+            this.lblColor = lblColor;
+            this.dtlColor = dtlColor;
         }
 
         @Override
         public Component getListCellRendererComponent(JList<? extends CompletionItem> jList,
                                                        CompletionItem value, int index,
                                                        boolean isSelected, boolean cellHasFocus) {
-            labelView.setText(value.getLabel());
-            detailView.setText(value.getDetail() != null ? value.getDetail() : "");
-            if (isSelected) {
-                setBackground(new Color(0xD0, 0xE8, 0xFF));
-            } else {
-                setBackground(new Color(0xF5, 0xF5, 0xF5));
-            }
-            setOpaque(true);
+            currentItem = value;
+            currentSelected = isSelected;
+            setBackground(bgColor);
             return this;
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            if (currentItem == null) return;
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_LCD_HRGB);
+
+            int w = getWidth(), h = getHeight();
+            int insetX = 4, insetY = 2;
+
+            if (currentSelected) {
+                g2.setColor(selColor);
+                g2.fill(new RoundRectangle2D.Float(insetX, insetY, w - insetX * 2, h - insetY * 2, 8, 8));
+            }
+
+            int x = 8;
+            int centerY = h / 2;
+
+            Color badgeColor = kindColor(currentItem.kind);
+            String letter = kindLetter(currentItem.kind);
+            int badgeY = centerY - BADGE_SIZE / 2;
+            g2.setColor(badgeColor);
+            g2.fill(new RoundRectangle2D.Float(x, badgeY, BADGE_SIZE, BADGE_SIZE, BADGE_ARC, BADGE_ARC));
+            g2.setFont(BADGE_FONT);
+            FontMetrics bfm = g2.getFontMetrics();
+            int lx = x + (BADGE_SIZE - bfm.stringWidth(letter)) / 2;
+            int ly = badgeY + (BADGE_SIZE - bfm.getHeight()) / 2 + bfm.getAscent();
+            g2.setColor(Color.WHITE);
+            g2.drawString(letter, lx, ly);
+            x += BADGE_SIZE + 8;
+
+            g2.setFont(LABEL_FONT);
+            FontMetrics lfm = g2.getFontMetrics();
+            g2.setColor(lblColor);
+            String label = currentItem.label;
+            int labelMaxWidth = w - x - 8;
+            String detail = currentItem.detail;
+            if (detail != null && !detail.isEmpty()) {
+                FontMetrics dfm = g2.getFontMetrics(DETAIL_FONT);
+                int detailWidth = dfm.stringWidth(detail) + 12;
+                labelMaxWidth = w - x - detailWidth - 8;
+            }
+            label = truncateText(lfm, label, labelMaxWidth);
+            g2.drawString(label, x, centerY - lfm.getHeight() / 2 + lfm.getAscent());
+
+            if (detail != null && !detail.isEmpty()) {
+                g2.setFont(DETAIL_FONT);
+                FontMetrics dfm = g2.getFontMetrics();
+                g2.setColor(dtlColor);
+                int detailX = w - dfm.stringWidth(detail) - 8;
+                g2.drawString(detail, detailX, centerY - dfm.getHeight() / 2 + dfm.getAscent());
+            }
+
+            g2.dispose();
+        }
+
+        private static String truncateText(FontMetrics fm, String text, int maxWidth) {
+            if (fm.stringWidth(text) <= maxWidth) return text;
+            String ellipsis = "…";
+            int ellipsisW = fm.stringWidth(ellipsis);
+            for (int i = text.length() - 1; i > 0; i--) {
+                if (fm.stringWidth(text.substring(0, i)) + ellipsisW <= maxWidth) {
+                    return text.substring(0, i) + ellipsis;
+                }
+            }
+            return ellipsis;
         }
     }
 }

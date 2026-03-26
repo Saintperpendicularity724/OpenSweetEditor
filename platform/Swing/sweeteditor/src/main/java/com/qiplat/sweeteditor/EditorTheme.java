@@ -60,6 +60,8 @@ public class EditorTheme {
     public Color scrollbarTrackColor = argb(0x48FFFFFF);
     /** Scrollbar thumb color. */
     public Color scrollbarThumbColor = argb(0xAA858585);
+    /** Scrollbar thumb active (dragging) color. */
+    public Color scrollbarThumbActiveColor = argb(0xFFBBBBBB);
 
     /** IME composition underline color. */
     public Color compositionUnderlineColor;
@@ -99,6 +101,17 @@ public class EditorTheme {
     /** Bracket match highlight background color, typically with alpha. */
     public Color bracketHighlightBgColor;
 
+    /** Completion popup background color. */
+    public Color completionBgColor;
+    /** Completion popup border color. */
+    public Color completionBorderColor;
+    /** Completion popup selected row highlight color. */
+    public Color completionSelectedBgColor;
+    /** Completion popup label text color. */
+    public Color completionLabelColor;
+    /** Completion popup detail text color. */
+    public Color completionDetailColor;
+
     /**
      * Theme text style mapping (extensible).
      * <p>Key: styleId, Value: {@link TextStyle}.
@@ -137,6 +150,7 @@ public class EditorTheme {
         t.splitLineColor            = argb(0x3356617A);
         t.scrollbarTrackColor       = argb(0x2AFFFFFF);
         t.scrollbarThumbColor       = argb(0x9A7282A0);
+        t.scrollbarThumbActiveColor = argb(0xFFAABEDD);
         t.compositionUnderlineColor = argb(0xFF7AA2F7);
         t.inlayHintBgColor          = argb(0x223A4A66);
         t.inlayHintTextColor        = argb(0xC0AFC2E0);
@@ -152,6 +166,11 @@ public class EditorTheme {
         t.linkedEditingInactiveColor = argb(0x667AA2F7);
         t.bracketHighlightBorderColor = argb(0xCC9ECE6A);
         t.bracketHighlightBgColor     = argb(0x2A9ECE6A);
+        t.completionBgColor              = argb(0xF0252830);
+        t.completionBorderColor          = argb(0x40607090);
+        t.completionSelectedBgColor      = argb(0x3D5580BB);
+        t.completionLabelColor           = argb(0xFFD8DEE9);
+        t.completionDetailColor          = argb(0xFF7A8494);
 
         t.defineTextStyle(STYLE_KEYWORD, new TextStyle(0xFF7AA2F7, TextStyle.BOLD));
         t.defineTextStyle(STYLE_STRING, new TextStyle(0xFF9ECE6A, TextStyle.NORMAL));
@@ -185,6 +204,7 @@ public class EditorTheme {
         t.splitLineColor            = argb(0x1F29426B);
         t.scrollbarTrackColor       = argb(0x1F2A3B55);
         t.scrollbarThumbColor       = argb(0x80446C9C);
+        t.scrollbarThumbActiveColor = argb(0xEE6A9AD0);
         t.compositionUnderlineColor = argb(0xFF2563EB);
         t.inlayHintBgColor          = argb(0x143B82F6);
         t.inlayHintTextColor        = argb(0xB0344A73);
@@ -200,6 +220,11 @@ public class EditorTheme {
         t.linkedEditingInactiveColor = argb(0x662563EB);
         t.bracketHighlightBorderColor = argb(0xCC0F766E);
         t.bracketHighlightBgColor     = argb(0x260F766E);
+        t.completionBgColor              = argb(0xF0FAFBFD);
+        t.completionBorderColor          = argb(0x30A0A8B8);
+        t.completionSelectedBgColor      = argb(0x3D3B82F6);
+        t.completionLabelColor           = argb(0xFF1F2937);
+        t.completionDetailColor          = argb(0xFF8A94A6);
 
         t.defineTextStyle(STYLE_KEYWORD, new TextStyle(0xFF3559D6, TextStyle.BOLD));
         t.defineTextStyle(STYLE_STRING, new TextStyle(0xFF0F7B6C, TextStyle.NORMAL));

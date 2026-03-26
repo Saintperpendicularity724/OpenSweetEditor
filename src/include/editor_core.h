@@ -28,6 +28,12 @@ namespace NS_SWEETEDITOR {
     int64_t double_tap_timeout {300};
     /// Long press time threshold
     int64_t long_press_ms {500};
+    /// Fling friction coefficient (higher = faster deceleration)
+    float fling_friction {3.5f};
+    /// Minimum fling velocity threshold in pixels/second
+    float fling_min_velocity {50.0f};
+    /// Maximum fling velocity cap in pixels/second
+    float fling_max_velocity {8000.0f};
     /// Max undo stack size (0 = unlimited)
     size_t max_undo_stack_size {512};
 
@@ -194,11 +200,15 @@ namespace NS_SWEETEDITOR {
     void setViewport(const Viewport& viewport);
 
     /// Reset text measurement, usually called when editor font is reset
-    void resetMeasurer();
+    void onFontMetricsChanged();
 
     /// Set auto wrap mode
     /// @param mode WrapMode
     void setWrapMode(WrapMode mode);
+
+    /// Set tab size (number of spaces per tab stop)
+    /// @param tab_size Tab size (default 4, minimum 1)
+    void setTabSize(uint32_t tab_size);
 
     /// Manually set editor scale factor
     /// @param scale Scale factor
@@ -256,6 +266,21 @@ namespace NS_SWEETEDITOR {
     /// @return Updated gesture result (platform should redraw; check needs_edge_scroll to decide
     ///         whether to continue the timer)
     GestureResult tickEdgeScroll();
+
+    /// Called by platform each frame while needs_fling is true.
+    /// Advances fling animation using real elapsed time and applies scroll delta.
+    /// @return Updated gesture result (platform should redraw; check needs_fling to decide
+    ///         whether to continue the timer)
+    GestureResult tickFling();
+
+    /// Unified animation tick: advances all active animations (edge-scroll, fling).
+    /// Platform can use a single frame callback driven by needs_animation and call this
+    /// instead of tickEdgeScroll() / tickFling() separately.
+    /// @return Updated gesture result with needs_animation reflecting whether any animation is still active
+    GestureResult tickAnimations();
+
+    /// Immediately stop any active fling animation
+    void stopFling();
 
     /// Handle keyboard event (optional default key mapping; platform can bypass and call atomic edit APIs directly)
     /// @param event Keyboard event data
@@ -641,6 +666,7 @@ namespace NS_SWEETEDITOR {
     UPtr<GestureHandler> m_gesture_handler_;
     UPtr<TextLayout> m_text_layout_;
     UPtr<UndoManager> m_undo_manager_;
+    UPtr<FlingAnimator> m_fling_;
     // Cache of render height for each logical line
     HashMap<size_t, float> m_line_heights_;
 
@@ -687,10 +713,11 @@ namespace NS_SWEETEDITOR {
     /// The platform timer calls tickEdgeScroll() which uses this state to scroll + update selection.
     struct EdgeScrollState {
       bool active {false};         ///< Whether edge scrolling is needed
-      float speed {0};             ///< Scroll speed in pixels per tick (positive = down, negative = up)
+      float speed {0};             ///< Scroll speed in pixels per second (positive = down, negative = up)
       PointF last_screen_point;    ///< Last finger position (used to re-run hitTest after scroll)
       bool is_handle_drag {false}; ///< true = handle drag, false = select drag
       bool is_mouse {false};       ///< Mouse drag (no y-offset)
+      int64_t last_tick_time {0};  ///< Monotonic timestamp of last tick (for dt calculation)
     };
     EdgeScrollState m_edge_scroll_;
 
@@ -795,7 +822,7 @@ namespace NS_SWEETEDITOR {
     /// Fill current editor state into GestureResult (remove duplicate assignments)
     void fillGestureResult(GestureResult& result) const;
     /// Mark all logical lines as layout dirty
-    void markAllLinesDirty();
+    void markAllLinesDirty(bool reset_heights = false);
     /// Reset composition state (clear composing flag and text)
     void resetCompositionState();
     void normalizeScrollState();

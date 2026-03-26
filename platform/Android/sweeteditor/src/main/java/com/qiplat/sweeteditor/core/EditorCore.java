@@ -104,11 +104,11 @@ public class EditorCore {
         nativeSetViewport(mNativeHandle, width, height);
     }
 
-    public void resetMeasurer() {
+    public void onFontMetricsChanged() {
         if (mNativeHandle == 0) {
             return;
         }
-        nativeResetMeasurer(mNativeHandle);
+        nativeOnFontMetricsChanged(mNativeHandle);
     }
 
     /**
@@ -129,6 +129,16 @@ public class EditorCore {
     public void setWrapMode(int mode) {
         if (mNativeHandle == 0) return;
         nativeSetWrapMode(mNativeHandle, mode);
+    }
+
+    /**
+     * Sets the tab size (number of spaces per tab stop).
+     *
+     * @param tabSize tab size (default 4, minimum 1)
+     */
+    public void setTabSize(int tabSize) {
+        if (mNativeHandle == 0) return;
+        nativeSetTabSize(mNativeHandle, tabSize);
     }
 
     /**
@@ -229,6 +239,38 @@ public class EditorCore {
             return new GestureResult();
         }
         ByteBuffer data = nativeTickEdgeScroll(mNativeHandle);
+        try {
+            return ProtocolDecoder.decodeGestureResult(data);
+        } finally {
+            nativeFreeBinaryData(data);
+        }
+    }
+
+    /**
+     * Tick fling (inertial scroll) animation.
+     * Call at ~16ms intervals while the previous GestureResult.needsFling was true.
+     */
+    public GestureResult tickFling() {
+        if (mNativeHandle == 0) {
+            return new GestureResult();
+        }
+        ByteBuffer data = nativeTickFling(mNativeHandle);
+        try {
+            return ProtocolDecoder.decodeGestureResult(data);
+        } finally {
+            nativeFreeBinaryData(data);
+        }
+    }
+
+    /**
+     * Unified animation tick: advances all active animations (edge-scroll, fling).
+     * Platform can use a single frame callback driven by GestureResult.needsAnimation.
+     */
+    public GestureResult tickAnimations() {
+        if (mNativeHandle == 0) {
+            return new GestureResult();
+        }
+        ByteBuffer data = nativeTickAnimations(mNativeHandle);
         try {
             return ProtocolDecoder.decodeGestureResult(data);
         } finally {
@@ -1533,6 +1575,15 @@ public class EditorCore {
          * Whether the platform should start/continue a ~16ms timer calling tickEdgeScroll().
          */
         public final boolean needsEdgeScroll;
+        /**
+         * Whether the platform should start/continue a ~16ms timer calling tickFling().
+         */
+        public final boolean needsFling;
+        /**
+         * Whether any animation is still active; platform can use a single
+         * frame callback calling tickAnimations() instead of separate tick calls.
+         */
+        public final boolean needsAnimation;
 
         public GestureResult() {
             this.type = GestureType.UNDEFINED;
@@ -1545,12 +1596,15 @@ public class EditorCore {
             this.viewScale = 1;
             this.hitTarget = HitTarget.NONE;
             this.needsEdgeScroll = false;
+            this.needsFling = false;
+            this.needsAnimation = false;
         }
 
         public GestureResult(GestureType type, PointF tapPoint,
                              TextPosition cursorPosition, boolean hasSelection, TextRange selection,
                              float viewScrollX, float viewScrollY, float viewScale,
-                             HitTarget hitTarget, boolean needsEdgeScroll) {
+                             HitTarget hitTarget, boolean needsEdgeScroll, boolean needsFling,
+                             boolean needsAnimation) {
             this.type = type;
             this.tapPoint = tapPoint;
             this.cursorPosition = cursorPosition;
@@ -1561,6 +1615,8 @@ public class EditorCore {
             this.viewScale = viewScale;
             this.hitTarget = hitTarget;
             this.needsEdgeScroll = needsEdgeScroll;
+            this.needsFling = needsFling;
+            this.needsAnimation = needsAnimation;
         }
 
         @NonNull
@@ -1614,13 +1670,16 @@ public class EditorCore {
     private static native void nativeLoadDocument(long handle, long documentHandle);
 
     @CriticalNative
-    private static native void nativeResetMeasurer(long handle);
+    private static native void nativeOnFontMetricsChanged(long handle);
 
     @CriticalNative
     private static native void nativeSetFoldArrowMode(long handle, int mode);
 
     @CriticalNative
     private static native void nativeSetWrapMode(long handle, int mode);
+
+    @CriticalNative
+    private static native void nativeSetTabSize(long handle, int tabSize);
 
     @CriticalNative
     private static native void nativeSetScale(long handle, float scale);
@@ -1645,6 +1704,12 @@ public class EditorCore {
 
     @FastNative
     private static native ByteBuffer nativeTickEdgeScroll(long handle);
+
+    @FastNative
+    private static native ByteBuffer nativeTickFling(long handle);
+
+    @FastNative
+    private static native ByteBuffer nativeTickAnimations(long handle);
 
     @FastNative
     private static native ByteBuffer nativeHandleKeyEvent(long handle, int keyCode, String text, int modifiers);

@@ -155,8 +155,8 @@ public class CompletionProviderManager {
 
         mergedItems.addAll(result.items);
         mergedItems.sort((a, b) -> {
-            String sa = a.getSortKey() != null ? a.getSortKey() : a.getLabel();
-            String sb = b.getSortKey() != null ? b.getSortKey() : b.getLabel();
+            String sa = a.sortKey != null ? a.sortKey : a.label;
+            String sb = b.sortKey != null ? b.sortKey : b.label;
             return sa.compareTo(sb);
         });
 

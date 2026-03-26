@@ -15,5 +15,7 @@ public enum VisualRunType {
     /** Phantom text (for Copilot code suggestions). */
     PHANTOM_TEXT,
     /** Fold placeholder (" … " shown at end of folded region first line). */
-    FOLD_PLACEHOLDER
+    FOLD_PLACEHOLDER,
+    /** Tab character (width computed by core based on tab_size and column position). */
+    TAB
 }

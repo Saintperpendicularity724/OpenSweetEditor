@@ -461,7 +461,6 @@ final class EditorRenderer implements EditorCore.TextMeasureCallback {
         if (!hasVertical && !hasHorizontal) return;
 
         Color trackColor = theme.scrollbarTrackColor;
-        Color thumbColor = theme.scrollbarThumbColor;
 
         float verticalTrackX = 0f;
         float verticalTrackWidth = 0f;
@@ -477,7 +476,7 @@ final class EditorRenderer implements EditorCore.TextMeasureCallback {
             verticalTrackWidth = vertical.track.width;
             g.setColor(trackColor);
             g.fill(new Rectangle2D.Float(trackX, trackY, vertical.track.width, vertical.track.height));
-            g.setColor(thumbColor);
+            g.setColor(vertical.thumbActive ? theme.scrollbarThumbActiveColor : theme.scrollbarThumbColor);
             g.fill(new Rectangle2D.Float(thumbX, thumbY, vertical.thumb.width, vertical.thumb.height));
         }
 
@@ -490,7 +489,7 @@ final class EditorRenderer implements EditorCore.TextMeasureCallback {
             horizontalTrackHeight = horizontal.track.height;
             g.setColor(trackColor);
             g.fill(new Rectangle2D.Float(trackX, trackY, horizontal.track.width, horizontal.track.height));
-            g.setColor(thumbColor);
+            g.setColor(horizontal.thumbActive ? theme.scrollbarThumbActiveColor : theme.scrollbarThumbColor);
             g.fill(new Rectangle2D.Float(thumbX, thumbY, horizontal.thumb.width, horizontal.thumb.height));
         }
 

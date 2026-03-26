@@ -9,7 +9,7 @@ using SweetLineTextRange = SweetLine.TextRange;
 
 namespace Demo {
 	public partial class Form1 : Form {
-		private const int STYLE_COLOR = (int)EditorTheme.STYLE_PREPROCESSOR + 1;
+		private const int STYLE_COLOR = (int)EditorTheme.STYLE_USER_BASE + 1;
 		private const string DEFAULT_FILE_NAME = "example.cpp";
 		private const string FALLBACK_SAMPLE_CODE =
 			"// SweetEditor Demo\n" +
@@ -294,9 +294,6 @@ namespace Demo {
 
 		private sealed class DemoDecorationProvider : IDecorationProvider {
 			private const string DefaultAnalysisFileName = "example.cpp";
-			private const int StyleKeyword = (int)EditorTheme.STYLE_KEYWORD;
-			private const int StyleComment = (int)EditorTheme.STYLE_COMMENT;
-			private const int StyleAnnotation = (int)EditorTheme.STYLE_ANNOTATION;
 			private const int StyleColor = STYLE_COLOR;
 			private const int IconClass = 1;
 			private const int MaxDynamicDiagnostics = 8;
@@ -589,7 +586,7 @@ namespace Demo {
 			private static void AppendTextInlayHint(Dictionary<int, List<DecorationResult.InlayHintItem>> inlayHints,
 													List<string> textLines,
 													TokenSpan token) {
-				if (token.StyleId != StyleKeyword) {
+				if (token.StyleId != (int)EditorTheme.STYLE_KEYWORD) {
 					return;
 				}
 				TokenRangeInfo? range = ExtractSingleLineTokenRange(token);
@@ -610,7 +607,7 @@ namespace Demo {
 			private static void AppendSeparator(List<DecorationResult.SeparatorGuideItem> separatorGuides,
 												List<string> textLines,
 												TokenSpan token) {
-				if (token.StyleId != StyleComment) {
+				if (token.StyleId != (int)EditorTheme.STYLE_COMMENT) {
 					return;
 				}
 				TokenRangeInfo? range = ExtractSingleLineTokenRange(token);
@@ -656,7 +653,7 @@ namespace Demo {
 			private static void AppendGutterIcons(Dictionary<int, List<int>> gutterIcons,
 												  List<string> textLines,
 												  TokenSpan token) {
-				if (token.StyleId != StyleKeyword) {
+				if (token.StyleId != (int)EditorTheme.STYLE_KEYWORD) {
 					return;
 				}
 				TokenRangeInfo? range = ExtractSingleLineTokenRange(token);
@@ -687,7 +684,7 @@ namespace Demo {
 					return firstKeywordRange;
 				}
 
-				if (token.StyleId == StyleKeyword) {
+				if (token.StyleId == (int)EditorTheme.STYLE_KEYWORD) {
 					firstKeywordRange ??= range;
 					if (phantomLines.Count == 0 && (literal == "class" || literal == "struct")) {
 						GetOrCreate(phantoms, range.Line)
@@ -701,7 +698,7 @@ namespace Demo {
 					return firstKeywordRange;
 				}
 
-				if (token.StyleId == StyleComment) {
+				if (token.StyleId == (int)EditorTheme.STYLE_COMMENT) {
 					int fixmeIndex = literal.IndexOf("FIXME", StringComparison.OrdinalIgnoreCase);
 					if (fixmeIndex >= 0) {
 						AppendDiagnostic(diagnostics, seenDiagnostics, ref diagnosticCount,
@@ -724,7 +721,7 @@ namespace Demo {
 					return firstKeywordRange;
 				}
 
-				if (token.StyleId == StyleAnnotation) {
+				if (token.StyleId == (int) EditorTheme.STYLE_ANNOTATION) {
 					AppendDiagnostic(diagnostics, seenDiagnostics, ref diagnosticCount,
 						range.Line, range.StartColumn, range.Length, 3, 0);
 				}

@@ -33,17 +33,20 @@ public final class ProtocolEncoder {
     /**
      * Pack EditorOptions into a direct ByteBuffer for zero-copy JNI transfer.
      * <p>
-     * Format (LE): f32 touch_slop, i64 double_tap_timeout, i64 long_press_ms, u64 max_undo_stack_size
+     * Format (LE): f32 touch_slop, i64 double_tap_timeout, i64 long_press_ms, f32 fling_friction, f32 fling_min_velocity, f32 fling_max_velocity, u64 max_undo_stack_size
      *
      * @param options editor construction options
-     * @return packed direct ByteBuffer (28 bytes, flipped)
+     * @return packed direct ByteBuffer (40 bytes, flipped)
      */
     public static ByteBuffer packEditorOptions(@NonNull EditorOptions options) {
-        // 4 + 8 + 8 + 8 = 28 bytes
-        ByteBuffer payload = ByteBuffer.allocateDirect(28).order(ByteOrder.LITTLE_ENDIAN);
+        // 4 + 8 + 8 + 4 + 4 + 4 + 8 = 40 bytes
+        ByteBuffer payload = ByteBuffer.allocateDirect(40).order(ByteOrder.LITTLE_ENDIAN);
         payload.putFloat(options.touchSlop);
         payload.putLong(options.doubleTapTimeout);
         payload.putLong(options.longPressMs);
+        payload.putFloat(options.flingFriction);
+        payload.putFloat(options.flingMinVelocity);
+        payload.putFloat(options.flingMaxVelocity);
         payload.putLong(options.maxUndoStackSize);
         payload.flip();
         return payload;

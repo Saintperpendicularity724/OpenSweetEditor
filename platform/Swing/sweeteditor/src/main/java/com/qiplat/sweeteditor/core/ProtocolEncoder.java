@@ -417,23 +417,26 @@ final class ProtocolEncoder {
     // ==================== EditorOptions ====================
 
     /** Size of the EditorOptions binary payload in bytes */
-    static final int EDITOR_OPTIONS_SIZE = 28; // 4 + 8 + 8 + 8
+    static final int EDITOR_OPTIONS_SIZE = 40; // 4 + 8 + 8 + 4 + 4 + 4 + 8
 
     /**
      * Pack EditorOptions directly into a MemorySegment (zero-copy path for Panama FFI).
      * <p>
-     * Format (LE): f32 touch_slop, i64 double_tap_timeout, i64 long_press_ms, u64 max_undo_stack_size
+     * Format (LE): f32 touch_slop, i64 double_tap_timeout, i64 long_press_ms, f32 fling_friction, f32 fling_min_velocity, f32 fling_max_velocity, u64 max_undo_stack_size
      *
      * @param options editor construction options
      * @param arena   arena to allocate the MemorySegment from
-     * @return packed MemorySegment (28 bytes)
+     * @return packed MemorySegment (40 bytes)
      */
     static MemorySegment packEditorOptions(EditorOptions options, Arena arena) {
         MemorySegment seg = arena.allocate(EDITOR_OPTIONS_SIZE);
         seg.set(ValueLayout.JAVA_FLOAT_UNALIGNED, 0, options.touchSlop);
         seg.set(ValueLayout.JAVA_LONG_UNALIGNED, 4, options.doubleTapTimeout);
         seg.set(ValueLayout.JAVA_LONG_UNALIGNED, 12, options.longPressMs);
-        seg.set(ValueLayout.JAVA_LONG_UNALIGNED, 20, options.maxUndoStackSize);
+        seg.set(ValueLayout.JAVA_FLOAT_UNALIGNED, 20, options.flingFriction);
+        seg.set(ValueLayout.JAVA_FLOAT_UNALIGNED, 24, options.flingMinVelocity);
+        seg.set(ValueLayout.JAVA_FLOAT_UNALIGNED, 28, options.flingMaxVelocity);
+        seg.set(ValueLayout.JAVA_LONG_UNALIGNED, 32, options.maxUndoStackSize);
         return seg;
     }
 

@@ -25,7 +25,9 @@ namespace NS_SWEETEDITOR {
     /// Ghost text (for Copilot-style code suggestions)
     PHANTOM_TEXT,
     /// Fold placeholder ("..." shown at end of folded region first line)
-    FOLD_PLACEHOLDER
+    FOLD_PLACEHOLDER,
+    /// Tab character (width computed by core based on tab_size and column position)
+    TAB
   };
 
   /// Data for each rendered text run
@@ -255,6 +257,8 @@ namespace NS_SWEETEDITOR {
     bool visible {false};
     /// Scrollbar alpha in [0, 1]
     float alpha {0};
+    /// Whether the thumb is currently being dragged
+    bool thumb_active {false};
     /// Scrollbar track rectangle
     ScrollbarRect track;
     /// Scrollbar thumb rectangle
@@ -401,6 +405,7 @@ namespace NS_SWEETEDITOR {
     {VisualRunType::INLAY_HINT, "INLAY_HINT"},
     {VisualRunType::PHANTOM_TEXT, "PHANTOM_TEXT"},
     {VisualRunType::FOLD_PLACEHOLDER, "FOLD_PLACEHOLDER"},
+    {VisualRunType::TAB, "TAB"},
   })
   // Custom VisualRun serialization: text (U16String) must be converted to UTF-8 JSON string
   inline void to_json(nlohmann::json& j, const VisualRun& r) {
@@ -464,7 +469,7 @@ namespace NS_SWEETEDITOR {
   NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(GutterIconRenderItem, logical_line, icon_id, origin, width, height)
   NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(FoldMarkerRenderItem, logical_line, fold_state, origin, width, height)
   NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(ScrollbarRect, origin, width, height)
-  NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(ScrollbarModel, visible, alpha, track, thumb)
+  NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(ScrollbarModel, visible, alpha, thumb_active, track, thumb)
   NLOHMANN_JSON_SERIALIZE_ENUM(CurrentLineRenderMode, {
     {CurrentLineRenderMode::BACKGROUND, "BACKGROUND"},
     {CurrentLineRenderMode::BORDER, "BORDER"},

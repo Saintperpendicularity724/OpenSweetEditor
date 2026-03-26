@@ -19,6 +19,58 @@ namespace NS_SWEETEDITOR {
     int64_t double_tap_timeout {300};
     /// Time threshold for long press
     int64_t long_press_ms {500};
+    /// Fling friction coefficient (higher = faster deceleration)
+    float fling_friction {2.0f};
+    /// Minimum fling velocity threshold in pixels/second
+    float fling_min_velocity {30.0f};
+    /// Maximum fling velocity cap in pixels/second
+    float fling_max_velocity {12000.0f};
+  };
+
+  /// Fling (inertial scroll) animator driven by exponential velocity decay.
+  /// Owned by EditorCore; platform calls tickFling() at ~16ms intervals.
+  class FlingAnimator {
+  public:
+    explicit FlingAnimator(const TouchConfig& config);
+
+    /// Record a touch sample for velocity estimation (call on TOUCH_MOVE)
+    void recordSample(const PointF& point, int64_t timestamp_ms);
+
+    /// Compute velocity from recent samples and start the fling animation.
+    /// Returns true if velocity exceeds min_velocity threshold.
+    bool start();
+
+    /// Advance the animation using real elapsed time since last call.
+    /// Writes the scroll delta into out_dx / out_dy.
+    /// Returns true if the animation is still running.
+    bool advance(float& out_dx, float& out_dy);
+
+    /// Immediately stop the fling animation
+    void stop();
+
+    /// Whether fling animation is currently running
+    bool isActive() const;
+
+    /// Clear recorded samples (call on TOUCH_DOWN)
+    void resetSamples();
+
+  private:
+    TouchConfig m_config_;
+    bool m_active_ {false};
+    float m_velocity_x_ {0};
+    float m_velocity_y_ {0};
+    float m_elapsed_ms_ {0};
+    int64_t m_last_tick_time_ {0};
+
+    static constexpr int kMaxSamples = 8;
+    struct Sample {
+      PointF point;
+      int64_t timestamp_ms {0};
+    };
+    Sample m_samples_[kMaxSamples];
+    int m_sample_count_ {0};
+
+    void computeVelocity(float& vx, float& vy) const;
   };
 
   /// Gesture event type definitions
@@ -154,6 +206,14 @@ namespace NS_SWEETEDITOR {
     /// When true, the platform must call tickEdgeScroll() at ~16ms intervals.
     /// When false, the platform should stop the edge-scroll timer.
     bool needs_edge_scroll {false};
+    /// Whether the platform should start/continue a fling (inertial scroll) timer.
+    /// When true, the platform must call tickFling() each frame (e.g. via Choreographer).
+    /// When false, the platform should stop the fling timer.
+    bool needs_fling {false};
+    /// Aggregated animation flag (needs_edge_scroll || needs_fling).
+    /// Platform can use a single animation loop driven by this flag
+    /// and call tickAnimations() instead of separate tick functions.
+    bool needs_animation {false};
   };
 
   /// Gesture handler class
@@ -224,7 +284,7 @@ namespace NS_SWEETEDITOR {
     {HitTargetType::INLAY_HINT_COLOR, "INLAY_HINT_COLOR"},
   })
   NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(HitTarget, type, line, column, icon_id, color_value)
-  NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(GestureResult, type, tap_point, modifiers, scale, scroll_x, scroll_y, cursor_position, has_selection, selection, view_scroll_x, view_scroll_y, view_scale, hit_target, needs_edge_scroll)
+  NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(GestureResult, type, tap_point, modifiers, scale, scroll_x, scroll_y, cursor_position, has_selection, selection, view_scroll_x, view_scroll_y, view_scale, hit_target, needs_edge_scroll, needs_fling, needs_animation)
 }
 
 #endif //SWEETEDITOR_GESTURE_H

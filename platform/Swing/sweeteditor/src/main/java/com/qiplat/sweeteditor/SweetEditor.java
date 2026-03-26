@@ -53,10 +53,10 @@ public class SweetEditor extends JPanel {
     private Timer cursorBlinkTimer;
     private boolean cursorVisible = true;
 
-    // Edge-scroll timer for auto-scrolling during mouse drag selection
-    private static final int EDGE_SCROLL_INTERVAL_MS = 16;
-    private Timer edgeScrollTimer;
-    private boolean edgeScrollActive = false;
+    // Unified animation timer: drives edge-scroll, fling, etc. at ~16ms
+    private static final int ANIMATION_INTERVAL_MS = 16;
+    private Timer animationTimer;
+    private boolean animationActive = false;
 
     // Event bus
     private EditorSettings settings;
@@ -84,7 +84,7 @@ public class SweetEditor extends JPanel {
 
         // Completion manager and popup controller
         completionProviderManager = new CompletionProviderManager(this);
-        completionPopupController = new CompletionPopupController(this);
+        completionPopupController = new CompletionPopupController(this, theme);
         completionProviderManager.setListener(completionPopupController);
         completionPopupController.setConfirmListener(this::applyCompletionItem);
 
@@ -100,7 +100,7 @@ public class SweetEditor extends JPanel {
         setFont(renderer.getRegularFont());
         setupEventListeners();
         setupCursorBlink();
-        setupEdgeScrollTimer();
+        setupAnimationTimer();
         enableInputMethods(true);
     }
 
@@ -143,6 +143,9 @@ public class SweetEditor extends JPanel {
         for (var entry : theme.textStyles.entrySet()) {
             TextStyle v = entry.getValue();
             editorCore.registerTextStyle(entry.getKey(), v.color, v.backgroundColor, v.fontStyle);
+        }
+        if (completionPopupController != null) {
+            completionPopupController.applyTheme(theme);
         }
         flush();
     }
@@ -340,16 +343,21 @@ public class SweetEditor extends JPanel {
 
     public void setLanguageConfiguration(LanguageConfiguration config) {
         this.languageConfiguration = config;
-        if (config != null && !config.getBrackets().isEmpty()) {
-            int size = config.getBrackets().size();
-            int[] opens = new int[size];
-            int[] closes = new int[size];
-            for (int i = 0; i < size; i++) {
-                LanguageConfiguration.BracketPair pair = config.getBrackets().get(i);
-                opens[i] = pair.open.isEmpty() ? 0 : pair.open.codePointAt(0);
-                closes[i] = pair.close.isEmpty() ? 0 : pair.close.codePointAt(0);
+        if (config != null) {
+            if (!config.getBrackets().isEmpty()) {
+                int size = config.getBrackets().size();
+                int[] opens = new int[size];
+                int[] closes = new int[size];
+                for (int i = 0; i < size; i++) {
+                    LanguageConfiguration.BracketPair pair = config.getBrackets().get(i);
+                    opens[i] = pair.open.isEmpty() ? 0 : pair.open.codePointAt(0);
+                    closes[i] = pair.close.isEmpty() ? 0 : pair.close.codePointAt(0);
+                }
+                editorCore.setBracketPairs(opens, closes);
             }
-            editorCore.setBracketPairs(opens, closes);
+            if (config.getTabSize() != null && config.getTabSize() > 0) {
+                editorCore.setTabSize(config.getTabSize());
+            }
         }
     }
     public LanguageConfiguration getLanguageConfiguration() { return languageConfiguration; }
@@ -670,7 +678,7 @@ public class SweetEditor extends JPanel {
         flush();
         if (result != null) {
             fireGestureEvents(result, new Point((int) x, (int) y));
-            updateEdgeScrollTimer(result.needsEdgeScroll);
+            updateAnimationTimer(result.needsAnimation);
         }
     }
 
@@ -751,9 +759,9 @@ public class SweetEditor extends JPanel {
     }
 
     private void applyCompletionItem(CompletionItem item) {
-        CompletionItem.TextEdit textEdit = item.getTextEdit();
-        boolean isSnippet = item.getInsertTextFormat() == CompletionItem.INSERT_TEXT_FORMAT_SNIPPET;
-        String text = item.getInsertText() != null ? item.getInsertText() : item.getLabel();
+        CompletionItem.TextEdit textEdit = item.textEdit;
+        boolean isSnippet = item.insertTextFormat == CompletionItem.INSERT_TEXT_FORMAT_SNIPPET;
+        String text = item.insertText != null ? item.insertText : item.label;
 
         // Determine the range to replace: textEdit takes priority, otherwise fallback to wordRange
         TextRange replaceRange = null;
@@ -871,31 +879,29 @@ public class SweetEditor extends JPanel {
         }
     }
 
-    // ===================== Edge Scroll =====================
-
-    private void setupEdgeScrollTimer() {
-        edgeScrollTimer = new Timer(EDGE_SCROLL_INTERVAL_MS, e -> {
-            if (!edgeScrollActive) return;
-            GestureResult result = editorCore.tickEdgeScroll();
+    private void setupAnimationTimer() {
+        animationTimer = new Timer(ANIMATION_INTERVAL_MS, e -> {
+            if (!animationActive) return;
+            GestureResult result = editorCore.tickAnimations();
             if (result != null) {
                 fireGestureEvents(result, null);
             }
             flush();
-            if (result == null || !result.needsEdgeScroll) {
-                edgeScrollActive = false;
-                edgeScrollTimer.stop();
+            if (result == null || !result.needsAnimation) {
+                animationActive = false;
+                animationTimer.stop();
             }
         });
-        edgeScrollTimer.setRepeats(true);
+        animationTimer.setRepeats(true);
     }
 
-    private void updateEdgeScrollTimer(boolean needsEdgeScroll) {
-        if (needsEdgeScroll && !edgeScrollActive) {
-            edgeScrollActive = true;
-            edgeScrollTimer.start();
-        } else if (!needsEdgeScroll && edgeScrollActive) {
-            edgeScrollActive = false;
-            edgeScrollTimer.stop();
+    private void updateAnimationTimer(boolean needsAnimation) {
+        if (needsAnimation && !animationActive) {
+            animationActive = true;
+            animationTimer.start();
+        } else if (!needsAnimation && animationActive) {
+            animationActive = false;
+            animationTimer.stop();
         }
     }
 
@@ -914,7 +920,7 @@ public class SweetEditor extends JPanel {
      * updates to make them take effect.
      */
     public void flush() {
-        editorCore.resetMeasurer();
+        editorCore.onFontMetricsChanged();
         renderModel = editorCore.buildRenderModel();
         repaint();
     }

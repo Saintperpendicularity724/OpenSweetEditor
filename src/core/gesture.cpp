@@ -301,4 +301,128 @@ namespace NS_SWEETEDITOR {
     return {};
   }
 #pragma endregion
+
+#pragma region [Class: FlingAnimator]
+  FlingAnimator::FlingAnimator(const TouchConfig& config): m_config_(config) {
+  }
+
+  void FlingAnimator::recordSample(const PointF& point, int64_t timestamp_ms) {
+    if (m_sample_count_ < kMaxSamples) {
+      m_samples_[m_sample_count_++] = {point, timestamp_ms};
+    } else {
+      for (int i = 1; i < kMaxSamples; ++i) {
+        m_samples_[i - 1] = m_samples_[i];
+      }
+      m_samples_[kMaxSamples - 1] = {point, timestamp_ms};
+    }
+  }
+
+  void FlingAnimator::resetSamples() {
+    m_sample_count_ = 0;
+  }
+
+  void FlingAnimator::computeVelocity(float& vx, float& vy) const {
+    vx = 0;
+    vy = 0;
+    if (m_sample_count_ < 2) return;
+
+    float weighted_vx = 0;
+    float weighted_vy = 0;
+    float weight_sum = 0;
+    for (int i = 1; i < m_sample_count_; ++i) {
+      float dt = static_cast<float>(m_samples_[i].timestamp_ms - m_samples_[i - 1].timestamp_ms);
+      if (dt <= 0) continue;
+      float seg_vx = (m_samples_[i].point.x - m_samples_[i - 1].point.x) / dt * 1000.0f;
+      float seg_vy = (m_samples_[i].point.y - m_samples_[i - 1].point.y) / dt * 1000.0f;
+      float w = static_cast<float>(i);
+      weighted_vx += seg_vx * w;
+      weighted_vy += seg_vy * w;
+      weight_sum += w;
+    }
+    if (weight_sum <= 0) return;
+
+    vx = weighted_vx / weight_sum;
+    vy = weighted_vy / weight_sum;
+  }
+
+  bool FlingAnimator::start() {
+    float vx = 0, vy = 0;
+    computeVelocity(vx, vy);
+
+    float speed = std::sqrt(vx * vx + vy * vy);
+    if (speed < m_config_.fling_min_velocity) {
+      m_active_ = false;
+      return false;
+    }
+
+    // Clamp velocity magnitude to max
+    if (speed > m_config_.fling_max_velocity) {
+      float ratio = m_config_.fling_max_velocity / speed;
+      vx *= ratio;
+      vy *= ratio;
+    }
+
+    m_velocity_x_ = vx;
+    m_velocity_y_ = vy;
+    m_elapsed_ms_ = 0;
+    m_last_tick_time_ = TimeUtil::milliTime();
+    m_active_ = true;
+    return true;
+  }
+
+  bool FlingAnimator::advance(float& out_dx, float& out_dy) {
+    if (!m_active_) {
+      out_dx = 0;
+      out_dy = 0;
+      return false;
+    }
+
+    int64_t now = TimeUtil::milliTime();
+    float dt_ms = static_cast<float>(now - m_last_tick_time_);
+    if (dt_ms <= 0) dt_ms = 1.0f;
+    m_last_tick_time_ = now;
+
+    float t0 = m_elapsed_ms_ / 1000.0f;
+    float t1 = (m_elapsed_ms_ + dt_ms) / 1000.0f;
+    float friction = m_config_.fling_friction;
+
+    float e0 = std::exp(-friction * t0);
+    float e1 = std::exp(-friction * t1);
+    float factor = (e0 - e1) / friction;
+
+    out_dx = m_velocity_x_ * factor;
+    out_dy = m_velocity_y_ * factor;
+
+    // Stop early when per-frame displacement is sub-pixel to prevent tail jitter
+    if (std::abs(out_dx) + std::abs(out_dy) < 0.5f) {
+      m_active_ = false;
+      out_dx = 0;
+      out_dy = 0;
+      return false;
+    }
+
+    m_elapsed_ms_ += dt_ms;
+
+    float current_vx = m_velocity_x_ * e1;
+    float current_vy = m_velocity_y_ * e1;
+    float current_speed = std::sqrt(current_vx * current_vx + current_vy * current_vy);
+    if (current_speed < m_config_.fling_min_velocity) {
+      m_active_ = false;
+      return false;
+    }
+    return true;
+  }
+
+  void FlingAnimator::stop() {
+    m_active_ = false;
+    m_velocity_x_ = 0;
+    m_velocity_y_ = 0;
+    m_elapsed_ms_ = 0;
+    m_last_tick_time_ = 0;
+  }
+
+  bool FlingAnimator::isActive() const {
+    return m_active_;
+  }
+#pragma endregion
 }

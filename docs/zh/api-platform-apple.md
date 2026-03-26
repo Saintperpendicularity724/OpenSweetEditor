@@ -31,7 +31,7 @@ func buildRenderModel() -> EditorRenderModel?
 func getLayoutMetrics() -> LayoutMetrics?
 func setScroll(scrollX: Float, scrollY: Float)
 func getScrollMetrics() -> ScrollMetrics
-func resetMeasurer()
+func onFontMetricsChanged()
 ```
 
 ### 输入与文本编辑

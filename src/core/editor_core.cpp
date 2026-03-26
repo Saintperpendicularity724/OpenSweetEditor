@@ -38,11 +38,11 @@ namespace NS_SWEETEDITOR {
 
 #pragma region [Class: EditorOptions]
   TouchConfig EditorOptions::simpleAsTouchConfig() const {
-    return TouchConfig {touch_slop, double_tap_timeout, long_press_ms};
+    return TouchConfig {touch_slop, double_tap_timeout, long_press_ms, fling_friction, fling_min_velocity, fling_max_velocity};
   }
 
   U8String EditorOptions::dump() const {
-    return "EditorOptions {touch_slop = " + std::to_string(touch_slop) + ", double_tap_timeout = " + std::to_string(double_tap_timeout) + ", long_press_ms = " + std::to_string(long_press_ms) + ", max_undo_stack_size = " + std::to_string(max_undo_stack_size) + "}";
+    return "EditorOptions {touch_slop = " + std::to_string(touch_slop) + ", double_tap_timeout = " + std::to_string(double_tap_timeout) + ", long_press_ms = " + std::to_string(long_press_ms) + ", fling_friction = " + std::to_string(fling_friction) + ", fling_min_velocity = " + std::to_string(fling_min_velocity) + ", fling_max_velocity = " + std::to_string(fling_max_velocity) + ", max_undo_stack_size = " + std::to_string(max_undo_stack_size) + "}";
   }
 
   U8String EditorSettings::dump() const {
@@ -70,6 +70,8 @@ namespace NS_SWEETEDITOR {
     m_gesture_handler_ = makeUPtr<GestureHandler>(options.simpleAsTouchConfig());
     m_text_layout_ = makeUPtr<TextLayout>(measurer, m_decorations_);
     m_undo_manager_ = makeUPtr<UndoManager>(options.max_undo_stack_size);
+    TouchConfig tc = options.simpleAsTouchConfig();
+m_fling_ = makeUPtr<FlingAnimator>(tc);
     LOGD("EditorCore::EditorCore(), options = %s", options.dump().c_str());
   }
 
@@ -131,16 +133,81 @@ namespace NS_SWEETEDITOR {
     LOGD("EditorCore::setViewport, viewport = %s", m_viewport_.dump().c_str());
   }
 
-  void EditorCore::resetMeasurer() {
+  void EditorCore::onFontMetricsChanged() {
+    float old_line_height = m_text_layout_->getLineHeight();
+
+    // ── Anchor-based scroll preservation ──
+    // Before resetting the measurer, find which logical line sits at the
+    // viewport top and what fraction of that line has been scrolled past.
+    // After the font change we recompute scroll_y purely from the integer
+    // anchor_line and the small fraction, avoiding any large-float arithmetic
+    // whose rounding error would diverge from the prefix-sum that
+    // resolveVisibleLines later uses for its binary search.
+    size_t anchor_line = 0;
+    float  anchor_fraction = 0.0f;   // [0,1] intra-line offset
+    float  old_scroll_x = 0.0f;
+
+    if (old_line_height > 0 && m_document_ != nullptr) {
+      const auto& lines = m_document_->getLogicalLines();
+      if (!lines.empty()) {
+        const float scroll_y = m_view_state_.scroll_y;
+        // Binary search: first line whose bottom > scroll_y
+        size_t lo = 0, hi = lines.size();
+        while (lo < hi) {
+          size_t mid = lo + (hi - lo) / 2;
+          float line_y = m_text_layout_->getLineStartY(mid);
+          float h = (lines[mid].height >= 0) ? lines[mid].height : old_line_height;
+          if (line_y + h <= scroll_y) {
+            lo = mid + 1;
+          } else {
+            hi = mid;
+          }
+        }
+        anchor_line = lo < lines.size() ? lo : lines.size() - 1;
+        float anchor_y = m_text_layout_->getLineStartY(anchor_line);
+        float anchor_h = (lines[anchor_line].height >= 0)
+                             ? lines[anchor_line].height
+                             : old_line_height;
+        anchor_fraction = (anchor_h > 0)
+                              ? (scroll_y - anchor_y) / anchor_h
+                              : 0.0f;
+        anchor_fraction = std::max(0.0f, std::min(1.0f, anchor_fraction));
+        old_scroll_x = m_view_state_.scroll_x;
+      }
+    }
+
     m_text_layout_->resetMeasurer();
-    // After font metrics change, all lines must be relaid out (line height, run width, etc. may change)
-    markAllLinesDirty();
+    float new_line_height = m_text_layout_->getLineHeight();
+
+    // All line heights are now invalid and must be relaid out
+    markAllLinesDirty(true);
+
+    // Recompute scroll_y from anchor using the NEW prefix index.
+    // getLineStartY rebuilds the prefix index (which now uses the fixed
+    // multiplication-based computation in ensurePrefixIndexUpTo), so
+    // scroll_y is guaranteed to be consistent with what resolveVisibleLines
+    // will see later.
+    if (old_line_height > 0 && new_line_height > 0 && old_line_height != new_line_height) {
+      float old_scroll_y = m_view_state_.scroll_y;
+      float ratio = new_line_height / old_line_height;
+      float new_anchor_y = m_text_layout_->getLineStartY(anchor_line);
+      m_view_state_.scroll_y = std::round(new_anchor_y + anchor_fraction * new_line_height);
+      m_view_state_.scroll_x = std::round(old_scroll_x * ratio);
+      LOGD("onFontMetricsChanged: old_h=%.4f new_h=%.4f anchor=%zu frac=%.4f old_scroll=%.1f new_scroll=%.1f",
+           old_line_height, new_line_height, anchor_line, anchor_fraction,
+           old_scroll_y, m_view_state_.scroll_y);
+    }
     normalizeScrollState();
   }
 
   void EditorCore::setWrapMode(WrapMode mode) {
     m_text_layout_->setWrapMode(mode);
     markAllLinesDirty();
+    normalizeScrollState();
+  }
+
+  void EditorCore::setTabSize(uint32_t tab_size) {
+    m_text_layout_->setTabSize(tab_size);
     normalizeScrollState();
   }
 
@@ -308,6 +375,7 @@ namespace NS_SWEETEDITOR {
     if (show_vertical && vertical_track_height > 0.0f) {
       vertical.visible = true;
       vertical.alpha = vertical_alpha;
+      vertical.thumb_active = (m_dragging_scrollbar_ == ScrollbarDragTarget::VERTICAL);
       vertical.track.origin = {vertical_track_x, 0.0f};
       vertical.track.width = scrollbar_thickness;
       vertical.track.height = vertical_track_height;
@@ -332,6 +400,7 @@ namespace NS_SWEETEDITOR {
     if (show_horizontal && horizontal_track_width > 0.0f && horizontal_track_y >= 0.0f) {
       horizontal.visible = true;
       horizontal.alpha = horizontal_alpha;
+      horizontal.thumb_active = (m_dragging_scrollbar_ == ScrollbarDragTarget::HORIZONTAL);
       horizontal.track.origin = {horizontal_track_x, horizontal_track_y};
       horizontal.track.width = horizontal_track_width;
       horizontal.track.height = scrollbar_thickness;
@@ -540,8 +609,10 @@ namespace NS_SWEETEDITOR {
       return gesture_result;
     }
 
-    // On TOUCH_DOWN / MOUSE_DOWN, check whether the cursor handle was pressed
+    // On TOUCH_DOWN / MOUSE_DOWN: cancel active fling and check handle hit
     if (event.type == EventType::TOUCH_DOWN || event.type == EventType::MOUSE_DOWN) {
+      m_fling_->stop();
+      m_fling_->resetSamples();
       if (!event.points.empty()) {
         m_dragging_handle_ = hitTestHandle(event.points[0]);
       }
@@ -562,6 +633,7 @@ namespace NS_SWEETEDITOR {
           gesture_result.type = GestureType::DRAG_SELECT;
           fillGestureResult(gesture_result);
           gesture_result.needs_edge_scroll = m_edge_scroll_.active;
+          gesture_result.needs_animation = m_edge_scroll_.active;
           return gesture_result;
         }
       }
@@ -586,6 +658,10 @@ namespace NS_SWEETEDITOR {
     if (event.type == EventType::TOUCH_UP || event.type == EventType::MOUSE_UP
         || event.type == EventType::TOUCH_CANCEL) {
       m_edge_scroll_.active = false;
+      // Attempt to start fling on touch-up if we were scrolling
+      if (event.type == EventType::TOUCH_UP && result.type == GestureType::UNDEFINED && !m_edge_scroll_.active) {
+        m_fling_->start();
+      }
     }
 
     // If TOUCH_DOWN just hit a cursor handle, skip follow-up actions such as TAP
@@ -640,17 +716,18 @@ namespace NS_SWEETEDITOR {
       break;
     }
     case GestureType::SCALE: {
-      float old_scale = m_view_state_.scale;
       m_view_state_.scale = std::max(1.0f, std::min(m_settings_.max_scale, m_view_state_.scale * result.scale));
-      float scale_ratio = m_view_state_.scale / old_scale;
-      m_view_state_.scroll_y *= scale_ratio;
-      m_view_state_.scroll_x *= scale_ratio;
+      // Don't adjust scroll here — metrics haven't been updated yet.
+      // Platform will call onFontMetricsChanged() which adjusts scroll with accurate line heights.
       break;
     }
     case GestureType::SCROLL:
       m_view_state_.scroll_x += result.scroll_x;
       m_view_state_.scroll_y += result.scroll_y;
       markScrollbarInteraction();
+      if (event.type == EventType::TOUCH_MOVE && !event.points.empty()) {
+        m_fling_->recordSample(event.points[0], TimeUtil::milliTime());
+      }
       break;
     case GestureType::FAST_SCROLL: {
       constexpr float kFastScrollMultiplier = 3.0f;
@@ -670,15 +747,56 @@ namespace NS_SWEETEDITOR {
       m_view_state_.scroll_y = std::round(m_view_state_.scroll_y);
     }
 
-    normalizeScrollState();
+    // For SCALE gestures, skip premature normalize — metrics haven't been updated yet.
+    // Platform will call onFontMetricsChanged() which normalizes with correct metrics.
+    if (result.type == GestureType::SCALE) {
+      m_text_layout_->setViewState(m_view_state_);
+    } else {
+      normalizeScrollState();
+    }
     fillGestureResult(result);
     // Propagate edge-scroll flag for DRAG_SELECT gestures
     if (result.type == GestureType::DRAG_SELECT) {
       result.needs_edge_scroll = m_edge_scroll_.active;
     }
+    result.needs_fling = m_fling_->isActive();
+    result.needs_animation = result.needs_edge_scroll || result.needs_fling;
 
     LOGD("EditorCore::handleGestureEvent, m_view_state_ = %s", m_view_state_.dump().c_str());
     return result;
+  }
+
+  GestureResult EditorCore::tickFling() {
+    GestureResult result;
+    result.type = GestureType::SCROLL;
+
+    if (!m_fling_->isActive()) {
+      fillGestureResult(result);
+      result.needs_fling = false;
+      result.needs_animation = m_edge_scroll_.active;
+      return result;
+    }
+
+    float dx = 0, dy = 0;
+    bool still_active = m_fling_->advance(dx, dy);
+
+    // Fling velocity is in screen space (finger direction), scroll is inverted
+    m_view_state_.scroll_x -= dx;
+    m_view_state_.scroll_y -= dy;
+    // Snap to integer pixels every frame to prevent sub-pixel jitter during slow fling
+    m_view_state_.scroll_x = std::round(m_view_state_.scroll_x);
+    m_view_state_.scroll_y = std::round(m_view_state_.scroll_y);
+    normalizeScrollState();
+    markScrollbarInteraction();
+
+    fillGestureResult(result);
+    result.needs_fling = still_active;
+    result.needs_animation = m_edge_scroll_.active || still_active;
+    return result;
+  }
+
+  void EditorCore::stopFling() {
+    m_fling_->stop();
   }
 
   KeyEventResult EditorCore::handleKeyEvent(const KeyEvent& event) {
@@ -2398,7 +2516,21 @@ namespace NS_SWEETEDITOR {
       std::swap(sel_start, sel_end);
     }
 
-    for (size_t line = sel_start.line; line <= sel_end.line && line < m_document_->getLineCount(); ++line) {
+    // Determine visible line range from already-laid-out visual lines.
+    // Only compute selection rects for lines that are actually on screen;
+    // for a 20 000-line select-all this reduces work from O(N) to O(visible).
+    size_t vis_first = sel_start.line;
+    size_t vis_last  = sel_end.line;
+    if (!model.lines.empty()) {
+      vis_first = model.lines.front().logical_line;
+      vis_last  = model.lines.back().logical_line;
+    }
+
+    // Clamp iteration to the intersection of selection range and visible range
+    size_t loop_start = std::max(sel_start.line, vis_first);
+    size_t loop_end   = std::min(sel_end.line, vis_last);
+
+    for (size_t line = loop_start; line <= loop_end && line < m_document_->getLineCount(); ++line) {
       // Skip fold-hidden lines
       const auto& ll = m_document_->getLogicalLines()[line];
       if (ll.is_fold_hidden) continue;
@@ -2875,17 +3007,17 @@ namespace NS_SWEETEDITOR {
     float edge_zone = std::clamp(m_viewport_.height * kEdgeZoneRatio,
                                  kMinEdgeZone, kMaxEdgeZone);
 
-    // Max speed per 16ms tick: 2 line-heights
+    // Max speed: 2 line-heights per 16ms frame, converted to px/s
     const float line_height = m_text_layout_->getLineHeight();
-    const float max_speed = line_height * 2.0f;
+    const float max_speed_per_sec = (line_height * 2.0f) / 0.016f;
 
     float speed = 0.0f;
     if (screen_point.y < edge_zone) {
       float ratio = (edge_zone - screen_point.y) / edge_zone;
-      speed = -max_speed * ratio;
+      speed = -max_speed_per_sec * ratio;
     } else if (screen_point.y > m_viewport_.height - edge_zone) {
       float ratio = (screen_point.y - (m_viewport_.height - edge_zone)) / edge_zone;
-      speed = max_speed * ratio;
+      speed = max_speed_per_sec * ratio;
     }
 
     if (speed != 0.0f) {
@@ -2894,9 +3026,13 @@ namespace NS_SWEETEDITOR {
       m_edge_scroll_.last_screen_point = screen_point;
       m_edge_scroll_.is_handle_drag = is_handle_drag;
       m_edge_scroll_.is_mouse = is_mouse;
+      if (m_edge_scroll_.last_tick_time == 0) {
+        m_edge_scroll_.last_tick_time = TimeUtil::milliTime();
+      }
     } else {
       m_edge_scroll_.active = false;
       m_edge_scroll_.speed = 0.0f;
+      m_edge_scroll_.last_tick_time = 0;
     }
   }
 
@@ -2907,11 +3043,17 @@ namespace NS_SWEETEDITOR {
     if (!m_edge_scroll_.active) {
       fillGestureResult(result);
       result.needs_edge_scroll = false;
+      result.needs_animation = m_fling_->isActive();
       return result;
     }
 
-    // Apply scroll delta; the same screen point now maps to a new text position.
-    m_view_state_.scroll_y += m_edge_scroll_.speed;
+    int64_t now = TimeUtil::milliTime();
+    float dt_sec = static_cast<float>(now - m_edge_scroll_.last_tick_time) / 1000.0f;
+    if (dt_sec <= 0) dt_sec = 0.016f;
+    dt_sec = std::min(dt_sec, 0.1f);
+    m_edge_scroll_.last_tick_time = now;
+
+    m_view_state_.scroll_y += m_edge_scroll_.speed * dt_sec;
     normalizeScrollState();
     markScrollbarInteraction();
 
@@ -2926,6 +3068,35 @@ namespace NS_SWEETEDITOR {
 
     fillGestureResult(result);
     result.needs_edge_scroll = m_edge_scroll_.active;
+    result.needs_animation = m_edge_scroll_.active || m_fling_->isActive();
+    return result;
+  }
+
+  GestureResult EditorCore::tickAnimations() {
+    GestureResult result;
+
+    bool did_edge_scroll = false;
+    if (m_edge_scroll_.active) {
+      result = tickEdgeScroll();
+      did_edge_scroll = true;
+    }
+
+    if (m_fling_->isActive()) {
+      GestureResult fling_result = tickFling();
+      if (!did_edge_scroll) {
+        result = fling_result;
+      } else {
+        result.needs_fling = fling_result.needs_fling;
+        result.view_scroll_x = fling_result.view_scroll_x;
+        result.view_scroll_y = fling_result.view_scroll_y;
+      }
+    }
+
+    if (!did_edge_scroll && !m_fling_->isActive()) {
+      fillGestureResult(result);
+    }
+
+    result.needs_animation = m_edge_scroll_.active || m_fling_->isActive();
     return result;
   }
 
@@ -3069,10 +3240,17 @@ namespace NS_SWEETEDITOR {
     return edit_result;
   }
 
-  void EditorCore::markAllLinesDirty() {
+  void EditorCore::markAllLinesDirty(bool reset_heights) {
     if (m_document_ == nullptr) return;
-    for (auto& line : m_document_->getLogicalLines()) {
-      line.is_layout_dirty = true;
+    if (reset_heights) {
+      for (auto& line : m_document_->getLogicalLines()) {
+        line.is_layout_dirty = true;
+        line.height = -1;
+      }
+    } else {
+      for (auto& line : m_document_->getLogicalLines()) {
+        line.is_layout_dirty = true;
+      }
     }
     if (m_text_layout_ != nullptr) {
       m_text_layout_->invalidateContentMetrics();

@@ -72,6 +72,9 @@ EDITOR_API const U16Char* get_document_line_text(intptr_t document_handle, size_
 ///        f32 touch_slop         — Move threshold for a tap (default 10)
 ///        i64 double_tap_timeout — Time window for double tap (default 300ms)
 ///        i64 long_press_ms      — Long press threshold (default 500ms)
+///        f32 fling_friction     — Fling friction coefficient (default 3.5)
+///        f32 fling_min_velocity — Minimum fling velocity in px/s (default 50)
+///        f32 fling_max_velocity — Maximum fling velocity in px/s (default 8000)
 ///        u64 max_undo_stack_size — Max undo stack depth, 0=unlimited (default 512)
 /// @param options_size Byte length of options_data
 /// @return EditorCore handle
@@ -92,8 +95,8 @@ EDITOR_API void set_editor_document(intptr_t editor_handle, intptr_t document_ha
 /// @param height Editor view height
 EDITOR_API void set_editor_viewport(intptr_t editor_handle, int16_t width, int16_t height);
 
-/// Reset editor text measurements (call when font changes)
-EDITOR_API void reset_editor_text_measurer(intptr_t editor_handle);
+/// Notify editor that font metrics have changed (call after font/scale changes)
+EDITOR_API void editor_on_font_metrics_changed(intptr_t editor_handle);
 
 /// Set fold arrow display mode (affects reserved gutter width)
 /// @param mode 0=AUTO(auto show when fold regions exist), 1=ALWAYS(always reserve), 2=HIDDEN(always hide)
@@ -102,6 +105,10 @@ EDITOR_API void editor_set_fold_arrow_mode(intptr_t editor_handle, int mode);
 /// Set auto wrap mode
 /// @param mode 0=NONE(no wrap), 1=CHAR_BREAK(character-level wrap), 2=WORD_BREAK(word-level wrap)
 EDITOR_API void editor_set_wrap_mode(intptr_t editor_handle, int mode);
+
+/// Set tab size (number of spaces per tab stop)
+/// @param tab_size Tab size (default 4, minimum 1)
+EDITOR_API void editor_set_tab_size(intptr_t editor_handle, int tab_size);
 
 /// Set editor scale factor
 /// @param scale Scale factor (1.0 = 100%)
@@ -297,6 +304,10 @@ EDITOR_API const uint8_t* get_layout_metrics(intptr_t editor_handle, size_t* out
 ///    i32 hit_target_color_value
 ///    i32 needs_edge_scroll (1 = platform should start/continue 16ms timer calling
 ///        editor_tick_edge_scroll; 0 = platform should stop the timer)
+///    i32 needs_fling (1 = platform should start/continue per-frame callback calling
+///        editor_tick_fling; 0 = platform should stop the callback)
+///    i32 needs_animation (1 = any animation still active; platform can use a single
+///        frame callback calling editor_tick_animations instead of separate tick calls)
 ///
 /// Handle gesture event
 /// @param type Event type
@@ -323,6 +334,22 @@ EDITOR_API const uint8_t* handle_editor_gesture_event_ex(intptr_t editor_handle,
 /// When needs_edge_scroll becomes false in the returned payload, stop the timer.
 /// @return GestureResult binary payload
 EDITOR_API const uint8_t* editor_tick_edge_scroll(intptr_t editor_handle, size_t* out_size);
+
+/// Tick fling (inertial scroll) animation.
+/// Call each frame while the previous GestureResult.needs_fling was true.
+/// The core tracks real elapsed time internally; any frame interval is fine.
+/// Returns the same GestureResult binary layout as handle_editor_gesture_event.
+/// When needs_fling becomes false in the returned payload, stop the timer.
+/// @return GestureResult binary payload
+EDITOR_API const uint8_t* editor_tick_fling(intptr_t editor_handle, size_t* out_size);
+
+/// Unified animation tick: advances all active animations (edge-scroll, fling).
+/// Platform can use a single frame callback driven by needs_animation and call this
+/// instead of editor_tick_edge_scroll() / editor_tick_fling() separately.
+/// Returns the same GestureResult binary layout as handle_editor_gesture_event.
+/// When needs_animation becomes false in the returned payload, stop the callback.
+/// @return GestureResult binary payload
+EDITOR_API const uint8_t* editor_tick_animations(intptr_t editor_handle, size_t* out_size);
 
 /// KeyEventResult binary return layout (payload uses native byte order; all supported platforms are currently LE):
 /// 1. i32 handled

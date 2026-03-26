@@ -9,13 +9,16 @@ namespace SweetEditor {
 
 		#region EditorOptions
 
-		internal static byte[] PackEditorOptions(EditorOptions options) {
-			// 4 + 8 + 8 + 8 = 28 bytes
-			byte[] payload = new byte[28];
+	internal static byte[] PackEditorOptions(EditorOptions options) {
+			// 4 + 8 + 8 + 4 + 4 + 4 + 8 = 40 bytes
+			byte[] payload = new byte[40];
 			int offset = 0;
 			BitConverter.TryWriteBytes(payload.AsSpan(offset), options.TouchSlop); offset += 4;
 			BinaryPrimitives.WriteInt64LittleEndian(payload.AsSpan(offset), options.DoubleTapTimeout); offset += 8;
 			BinaryPrimitives.WriteInt64LittleEndian(payload.AsSpan(offset), options.LongPressMs); offset += 8;
+			BitConverter.TryWriteBytes(payload.AsSpan(offset), options.FlingFriction); offset += 4;
+			BitConverter.TryWriteBytes(payload.AsSpan(offset), options.FlingMinVelocity); offset += 4;
+			BitConverter.TryWriteBytes(payload.AsSpan(offset), options.FlingMaxVelocity); offset += 4;
 			BinaryPrimitives.WriteUInt64LittleEndian(payload.AsSpan(offset), options.MaxUndoStackSize);
 			return payload;
 		}
@@ -757,6 +760,7 @@ namespace SweetEditor {
 			scrollbar = default;
 			if (!TryReadInt32(data, ref offset, out int visible) ||
 				!TryReadFloat(data, ref offset, out float alpha) ||
+				!TryReadInt32(data, ref offset, out int thumbActive) ||
 				!TryReadScrollbarRect(data, ref offset, out ScrollbarRect track) ||
 				!TryReadScrollbarRect(data, ref offset, out ScrollbarRect thumb)) {
 				return false;
@@ -764,6 +768,7 @@ namespace SweetEditor {
 			scrollbar = new ScrollbarModel {
 				Visible = visible != 0,
 				Alpha = alpha,
+				ThumbActive = thumbActive != 0,
 				Track = track,
 				Thumb = thumb,
 			};
@@ -1072,6 +1077,12 @@ namespace SweetEditor {
 			}
 			if (TryReadInt32(data, ref offset, out int needsEdgeScrollInt)) {
 				result.NeedsEdgeScroll = needsEdgeScrollInt != 0;
+			}
+			if (TryReadInt32(data, ref offset, out int needsFlingInt)) {
+				result.NeedsFling = needsFlingInt != 0;
+			}
+			if (TryReadInt32(data, ref offset, out int needsAnimationInt)) {
+				result.NeedsAnimation = needsAnimationInt != 0;
 			}
 			return result;
 		}

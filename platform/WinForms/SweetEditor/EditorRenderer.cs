@@ -328,11 +328,12 @@ namespace SweetEditor {
 			if (!hasVertical && !hasHorizontal) return;
 
 			using var trackBrush = new SolidBrush(currentTheme.ScrollbarTrackColor);
-			using var thumbBrush = new SolidBrush(currentTheme.ScrollbarThumbColor);
 			RectangleF verticalTrackRect = RectangleF.Empty;
 			RectangleF horizontalTrackRect = RectangleF.Empty;
 
 			if (hasVertical) {
+				var vThumbColor = vertical.ThumbActive ? currentTheme.ScrollbarThumbActiveColor : currentTheme.ScrollbarThumbColor;
+				using var vThumbBrush = new SolidBrush(vThumbColor);
 				verticalTrackRect = new RectangleF(
 					vertical.Track.Origin.X, vertical.Track.Origin.Y,
 					vertical.Track.Width, vertical.Track.Height);
@@ -340,10 +341,12 @@ namespace SweetEditor {
 					vertical.Thumb.Origin.X, vertical.Thumb.Origin.Y,
 					vertical.Thumb.Width, vertical.Thumb.Height);
 				g.FillRectangle(trackBrush, verticalTrackRect);
-				g.FillRectangle(thumbBrush, verticalThumbRect);
+				g.FillRectangle(vThumbBrush, verticalThumbRect);
 			}
 
 			if (hasHorizontal) {
+				var hThumbColor = horizontal.ThumbActive ? currentTheme.ScrollbarThumbActiveColor : currentTheme.ScrollbarThumbColor;
+				using var hThumbBrush = new SolidBrush(hThumbColor);
 				horizontalTrackRect = new RectangleF(
 					horizontal.Track.Origin.X, horizontal.Track.Origin.Y,
 					horizontal.Track.Width, horizontal.Track.Height);
@@ -351,7 +354,7 @@ namespace SweetEditor {
 					horizontal.Thumb.Origin.X, horizontal.Thumb.Origin.Y,
 					horizontal.Thumb.Width, horizontal.Thumb.Height);
 				g.FillRectangle(trackBrush, horizontalTrackRect);
-				g.FillRectangle(thumbBrush, horizontalThumbRect);
+				g.FillRectangle(hThumbBrush, horizontalThumbRect);
 			}
 
 			if (hasVertical && hasHorizontal) {

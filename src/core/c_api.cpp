@@ -246,6 +246,7 @@ static void appendScrollbarRect(std::vector<uint8_t>& buffer, const ScrollbarRec
 static void appendScrollbarModel(std::vector<uint8_t>& buffer, const ScrollbarModel& scrollbar) {
   appendBool(buffer, scrollbar.visible);
   appendF32(buffer, scrollbar.alpha);
+  appendBool(buffer, scrollbar.thumb_active);
   appendScrollbarRect(buffer, scrollbar.track);
   appendScrollbarRect(buffer, scrollbar.thumb);
 }
@@ -391,6 +392,8 @@ static const uint8_t* gestureResultToBinary(const GestureResult& result, size_t*
   appendI32(buffer, static_cast<int32_t>(result.hit_target.icon_id));
   appendI32(buffer, static_cast<int32_t>(result.hit_target.color_value));
   appendI32(buffer, result.needs_edge_scroll ? 1 : 0);
+  appendI32(buffer, result.needs_fling ? 1 : 0);
+  appendI32(buffer, result.needs_animation ? 1 : 0);
   return allocBinaryPayload(buffer.data(), buffer.size(), out_size);
 }
 
@@ -524,7 +527,7 @@ const U16Char* get_document_line_text(intptr_t document_handle, size_t line) {
 intptr_t create_editor(text_measurer_t measurer, const uint8_t* options_data, size_t options_size) {
   Ptr<CTextMeasurer> c_measurer = makePtr<CTextMeasurer>(measurer);
   EditorOptions options;
-  // Decode binary payload (LE): f32 touch_slop, i64 double_tap_timeout, i64 long_press_ms, u64 max_undo_stack_size
+  // Decode binary payload (LE): f32 touch_slop, i64 double_tap_timeout, i64 long_press_ms, f32 fling_friction, f32 fling_min_velocity, f32 fling_max_velocity, u64 max_undo_stack_size
   if (options_data != nullptr) {
     size_t offset = 0;
     auto readF32 = [&](float& out) {
@@ -539,6 +542,9 @@ intptr_t create_editor(text_measurer_t measurer, const uint8_t* options_data, si
     readF32(options.touch_slop);
     readI64(options.double_tap_timeout);
     readI64(options.long_press_ms);
+    readF32(options.fling_friction);
+    readF32(options.fling_min_velocity);
+    readF32(options.fling_max_velocity);
     readU64(options.max_undo_stack_size);
   }
   Ptr<EditorCore> editor_core = makePtr<EditorCore>(c_measurer, options);
@@ -573,12 +579,12 @@ void set_editor_viewport(intptr_t editor_handle, int16_t width, int16_t height) 
   editor_core->setViewport({(float)width, (float)height});
 }
 
-void reset_editor_text_measurer(intptr_t editor_handle) {
+void editor_on_font_metrics_changed(intptr_t editor_handle) {
   Ptr<EditorCore> editor_core = getCPtrHolderValue<EditorCore>(editor_handle);
   if (editor_core == nullptr) {
     return;
   }
-  editor_core->resetMeasurer();
+  editor_core->onFontMetricsChanged();
 }
 
 void editor_set_fold_arrow_mode(intptr_t editor_handle, int mode) {
@@ -595,6 +601,14 @@ void editor_set_wrap_mode(intptr_t editor_handle, int mode) {
     return;
   }
   editor_core->setWrapMode(static_cast<WrapMode>(mode));
+}
+
+void editor_set_tab_size(intptr_t editor_handle, int tab_size) {
+  Ptr<EditorCore> editor_core = getCPtrHolderValue<EditorCore>(editor_handle);
+  if (editor_core == nullptr) {
+    return;
+  }
+  editor_core->setTabSize(static_cast<uint32_t>(tab_size));
 }
 
 void editor_set_scale(intptr_t editor_handle, float scale) {
@@ -709,6 +723,30 @@ const uint8_t* editor_tick_edge_scroll(intptr_t editor_handle, size_t* out_size)
     return nullptr;
   }
   GestureResult result = editor_core->tickEdgeScroll();
+  return gestureResultToBinary(result, out_size);
+}
+
+const uint8_t* editor_tick_fling(intptr_t editor_handle, size_t* out_size) {
+  Ptr<EditorCore> editor_core = getCPtrHolderValue<EditorCore>(editor_handle);
+  if (editor_core == nullptr) {
+    if (out_size != nullptr) {
+      *out_size = 0;
+    }
+    return nullptr;
+  }
+  GestureResult result = editor_core->tickFling();
+  return gestureResultToBinary(result, out_size);
+}
+
+const uint8_t* editor_tick_animations(intptr_t editor_handle, size_t* out_size) {
+  Ptr<EditorCore> editor_core = getCPtrHolderValue<EditorCore>(editor_handle);
+  if (editor_core == nullptr) {
+    if (out_size != nullptr) {
+      *out_size = 0;
+    }
+    return nullptr;
+  }
+  GestureResult result = editor_core->tickAnimations();
   return gestureResultToBinary(result, out_size);
 }
 

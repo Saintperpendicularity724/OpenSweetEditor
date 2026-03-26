@@ -12,6 +12,9 @@ package com.qiplat.sweeteditor.core;
  *   f32  touch_slop
  *   i64  double_tap_timeout
  *   i64  long_press_ms
+ *   f32  fling_friction
+ *   f32  fling_min_velocity
+ *   f32  fling_max_velocity
  *   u64  max_undo_stack_size
  * </pre>
  */
@@ -22,21 +25,36 @@ public class EditorOptions {
     public final long doubleTapTimeout;
     /** Long press time threshold (milliseconds) */
     public final long longPressMs;
+    /** Fling friction coefficient (higher = faster deceleration) */
+    public final float flingFriction;
+    /** Minimum fling velocity threshold in pixels/second */
+    public final float flingMinVelocity;
+    /** Maximum fling velocity cap in pixels/second */
+    public final float flingMaxVelocity;
     /** Max undo stack size (0 = unlimited) */
     public final long maxUndoStackSize;
 
     public EditorOptions() {
-        this(10f, 300, 500, 512);
+        this(10f, 300, 500, 3.5f, 50f, 8000f, 512);
     }
 
     public EditorOptions(float touchSlop, long doubleTapTimeout) {
-        this(touchSlop, doubleTapTimeout, 500, 512);
+        this(touchSlop, doubleTapTimeout, 500, 3.5f, 50f, 8000f, 512);
     }
 
     public EditorOptions(float touchSlop, long doubleTapTimeout, long longPressMs, long maxUndoStackSize) {
+        this(touchSlop, doubleTapTimeout, longPressMs, 3.5f, 50f, 8000f, maxUndoStackSize);
+    }
+
+    public EditorOptions(float touchSlop, long doubleTapTimeout, long longPressMs,
+                         float flingFriction, float flingMinVelocity, float flingMaxVelocity,
+                         long maxUndoStackSize) {
         this.touchSlop = touchSlop;
         this.doubleTapTimeout = doubleTapTimeout;
         this.longPressMs = longPressMs;
+        this.flingFriction = flingFriction;
+        this.flingMinVelocity = flingMinVelocity;
+        this.flingMaxVelocity = flingMaxVelocity;
         this.maxUndoStackSize = maxUndoStackSize;
     }
 }

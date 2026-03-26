@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Linq;
 using System.Windows.Forms;
 
@@ -13,19 +14,6 @@ namespace SweetEditor {
 			public string NewText { get; }
 			public TextEdit(TextRange range, string newText) { Range = range; NewText = newText; }
 		}
-
-		public string Label { get; set; }
-		public string? Detail { get; set; }
-		public int IconId { get; set; }
-		public string? InsertText { get; set; }
-		/// <summary>Insert text format: INSERT_TEXT_FORMAT_PLAIN_TEXT or INSERT_TEXT_FORMAT_SNIPPET.</summary>
-		public int InsertTextFormat { get; set; } = INSERT_TEXT_FORMAT_PLAIN_TEXT;
-		public TextEdit? TextEditValue { get; set; }
-		public string? FilterText { get; set; }
-		public string? SortKey { get; set; }
-		public int Kind { get; set; }
-
-		public string MatchText => FilterText ?? Label;
 
 		public const int KIND_KEYWORD = 0;
 		public const int KIND_FUNCTION = 1;
@@ -41,6 +29,18 @@ namespace SweetEditor {
 		public const int INSERT_TEXT_FORMAT_PLAIN_TEXT = 1;
 		/// <summary>VSCode Snippet format (supports placeholders like $1, ${1:default}, and $0).</summary>
 		public const int INSERT_TEXT_FORMAT_SNIPPET = 2;
+
+		public string Label { get; set; }
+		public string? Detail { get; set; }
+		public string? InsertText { get; set; }
+		/// <summary>Insert text format: INSERT_TEXT_FORMAT_PLAIN_TEXT or INSERT_TEXT_FORMAT_SNIPPET.</summary>
+		public int InsertTextFormat { get; set; } = INSERT_TEXT_FORMAT_PLAIN_TEXT;
+		public TextEdit? TextEditValue { get; set; }
+		public string? FilterText { get; set; }
+		public string? SortKey { get; set; }
+		public int Kind { get; set; }
+
+		public string MatchText => FilterText ?? Label;
 
 		public override string ToString() => $"CompletionItem{{label='{Label}', kind={Kind}}}";
 	}
@@ -272,9 +272,17 @@ namespace SweetEditor {
 		public event CompletionConfirmHandler? OnConfirmed;
 
 		private const int MaxVisibleItems = 6;
-		private const int ItemHeight = 24;
+		private const int ItemHeight = 28;
 		private const int PopupWidth = 300;
 		private const int Gap = 4;
+		private const int BadgeSize = 18;
+		private const int BadgeArc = 6;
+
+		private Color panelBg;
+		private Color panelBorder;
+		private Color selectedBg;
+		private Color labelColor;
+		private Color detailColor;
 
 		private readonly Control anchorControl;
 		private Form? popupForm;
@@ -286,9 +294,30 @@ namespace SweetEditor {
 		private float cachedCursorY;
 		private float cachedCursorHeight;
 
-		public CompletionPopupController(Control anchorControl) {
+		public CompletionPopupController(Control anchorControl, EditorTheme theme) {
 			this.anchorControl = anchorControl;
+			ApplyThemeColors(theme);
 			InitPopup();
+		}
+
+		public void ApplyTheme(EditorTheme theme) {
+			ApplyThemeColors(theme);
+			if (popupForm != null) {
+				popupForm.BackColor = Color.FromArgb(panelBg.R, panelBg.G, panelBg.B);
+			}
+			if (listBox != null) {
+				listBox.BackColor = Color.FromArgb(panelBg.R, panelBg.G, panelBg.B);
+				listBox.ForeColor = labelColor;
+				listBox.Invalidate();
+			}
+		}
+
+		private void ApplyThemeColors(EditorTheme theme) {
+			panelBg = theme.CompletionBgColor;
+			panelBorder = theme.CompletionBorderColor;
+			selectedBg = theme.CompletionSelectedBgColor;
+			labelColor = theme.CompletionLabelColor;
+			detailColor = theme.CompletionDetailColor;
 		}
 
 		public void SetRenderer(ICompletionItemRenderer? renderer) {
@@ -378,12 +407,48 @@ namespace SweetEditor {
 			}
 		}
 
+		private static Color KindColor(int kind) => kind switch {
+			CompletionItem.KIND_KEYWORD   => Color.FromArgb(0xC6, 0x78, 0xDD),
+			CompletionItem.KIND_FUNCTION  => Color.FromArgb(0x61, 0xAF, 0xEF),
+			CompletionItem.KIND_VARIABLE  => Color.FromArgb(0xE5, 0xC0, 0x7B),
+			CompletionItem.KIND_CLASS     => Color.FromArgb(0xE0, 0x6C, 0x75),
+			CompletionItem.KIND_INTERFACE => Color.FromArgb(0x56, 0xB6, 0xC2),
+			CompletionItem.KIND_MODULE    => Color.FromArgb(0xD1, 0x9A, 0x66),
+			CompletionItem.KIND_PROPERTY  => Color.FromArgb(0x98, 0xC3, 0x79),
+			CompletionItem.KIND_SNIPPET   => Color.FromArgb(0xBE, 0x50, 0x46),
+			_ => Color.FromArgb(0x7A, 0x84, 0x94)
+		};
+
+		private static string KindLetter(int kind) => kind switch {
+			CompletionItem.KIND_KEYWORD   => "K",
+			CompletionItem.KIND_FUNCTION  => "F",
+			CompletionItem.KIND_VARIABLE  => "V",
+			CompletionItem.KIND_CLASS     => "C",
+			CompletionItem.KIND_INTERFACE => "I",
+			CompletionItem.KIND_MODULE    => "M",
+			CompletionItem.KIND_PROPERTY  => "P",
+			CompletionItem.KIND_SNIPPET   => "S",
+			_ => "T"
+		};
+
+		private static GraphicsPath RoundedRect(RectangleF rect, float radius) {
+			var path = new GraphicsPath();
+			float d = radius * 2;
+			path.AddArc(rect.X, rect.Y, d, d, 180, 90);
+			path.AddArc(rect.Right - d, rect.Y, d, d, 270, 90);
+			path.AddArc(rect.Right - d, rect.Bottom - d, d, d, 0, 90);
+			path.AddArc(rect.X, rect.Bottom - d, d, d, 90, 90);
+			path.CloseFigure();
+			return path;
+		}
+
 		private void InitPopup() {
 			popupForm = new CompletionPopupForm {
 				FormBorderStyle = FormBorderStyle.None,
 				ShowInTaskbar = false,
 				StartPosition = FormStartPosition.Manual,
 				TopMost = true,
+				BackColor = Color.FromArgb(panelBg.R, panelBg.G, panelBg.B),
 				Size = new Size(PopupWidth, ItemHeight * MaxVisibleItems)
 			};
 
@@ -392,7 +457,9 @@ namespace SweetEditor {
 				IntegralHeight = false,
 				ItemHeight = ItemHeight,
 				DrawMode = DrawMode.OwnerDrawFixed,
-				BorderStyle = BorderStyle.FixedSingle,
+				BorderStyle = BorderStyle.None,
+				BackColor = Color.FromArgb(panelBg.R, panelBg.G, panelBg.B),
+				ForeColor = labelColor,
 				Font = new Font("Consolas", 10f),
 				TabStop = false
 			};
@@ -401,21 +468,53 @@ namespace SweetEditor {
 				if (e.Index < 0 || e.Index >= items.Count) return;
 				var item = items[e.Index];
 				bool isSelected = e.Index == selectedIndex;
+				var g = e.Graphics;
+				g.SmoothingMode = SmoothingMode.AntiAlias;
+				g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
 
 				if (customRenderer != null) {
-					customRenderer.DrawItem(e.Graphics, e.Bounds, item, isSelected);
-				} else {
-					e.Graphics.FillRectangle(
-						isSelected ? new SolidBrush(Color.FromArgb(0xD0, 0xE8, 0xFF)) : new SolidBrush(Color.FromArgb(0xF5, 0xF5, 0xF5)),
-						e.Bounds);
-					TextRenderer.DrawText(e.Graphics, item.Label, listBox.Font,
-						new Point(e.Bounds.Left + 6, e.Bounds.Top + 2), Color.Black);
-					if (!string.IsNullOrEmpty(item.Detail)) {
-						var detailFont = new Font("Segoe UI", 8f);
-						var detailSize = TextRenderer.MeasureText(item.Detail, detailFont);
-						TextRenderer.DrawText(e.Graphics, item.Detail, detailFont,
-							new Point(e.Bounds.Right - detailSize.Width - 6, e.Bounds.Top + 4), Color.Gray);
-					}
+					customRenderer.DrawItem(g, e.Bounds, item, isSelected);
+					return;
+				}
+
+				using var bgBrush = new SolidBrush(Color.FromArgb(panelBg.R, panelBg.G, panelBg.B));
+				g.FillRectangle(bgBrush, e.Bounds);
+
+				if (isSelected) {
+					var selRect = new RectangleF(e.Bounds.X + 3, e.Bounds.Y + 1, e.Bounds.Width - 6, e.Bounds.Height - 2);
+					using var selPath = RoundedRect(selRect, 4);
+					using var selBrush = new SolidBrush(selectedBg);
+					g.FillPath(selBrush, selPath);
+				}
+
+				int x = e.Bounds.Left + 8;
+				int centerY = e.Bounds.Top + e.Bounds.Height / 2;
+
+				var badgeColor = KindColor(item.Kind);
+				var letter = KindLetter(item.Kind);
+				int badgeY = centerY - BadgeSize / 2;
+				var badgeRect = new RectangleF(x, badgeY, BadgeSize, BadgeSize);
+				using (var badgePath = RoundedRect(badgeRect, BadgeArc)) {
+					using var badgeBrush = new SolidBrush(badgeColor);
+					g.FillPath(badgeBrush, badgePath);
+				}
+				using var badgeFont = new Font("Segoe UI", 8f, FontStyle.Bold);
+				var bfm = g.MeasureString(letter, badgeFont);
+				g.DrawString(letter, badgeFont, Brushes.White,
+					x + (BadgeSize - bfm.Width) / 2, badgeY + (BadgeSize - bfm.Height) / 2);
+				x += BadgeSize + 8;
+
+				using var labelFont = new Font("Consolas", 10f);
+				var labelSize = TextRenderer.MeasureText(item.Label, labelFont);
+				int labelY = centerY - labelSize.Height / 2;
+				TextRenderer.DrawText(g, item.Label, labelFont, new Point(x, labelY), labelColor);
+
+				if (!string.IsNullOrEmpty(item.Detail)) {
+					using var detailFont = new Font("Segoe UI", 8f);
+					var detailSize = TextRenderer.MeasureText(item.Detail, detailFont);
+					int detailX = e.Bounds.Right - detailSize.Width - 8;
+					int detailY = centerY - detailSize.Height / 2;
+					TextRenderer.DrawText(g, item.Detail, detailFont, new Point(detailX, detailY), detailColor);
 				}
 			};
 

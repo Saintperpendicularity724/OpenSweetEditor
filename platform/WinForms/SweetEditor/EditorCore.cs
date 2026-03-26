@@ -255,7 +255,7 @@ namespace SweetEditor {
 	/// <summary>
 	/// Construction-time immutable options for EditorCore.
 	/// Fields mirror the C++ EditorOptions struct.
-	/// Binary layout (LE): f32 touch_slop, i64 double_tap_timeout, i64 long_press_ms, u64 max_undo_stack_size
+	/// Binary layout (LE): f32 touch_slop, i64 double_tap_timeout, i64 long_press_ms, f32 fling_friction, f32 fling_min_velocity, f32 fling_max_velocity, u64 max_undo_stack_size
 	/// </summary>
 	public class EditorOptions {
 		/// <summary>Threshold to determine if a gesture is a move (default 10)</summary>
@@ -264,6 +264,12 @@ namespace SweetEditor {
 		public long DoubleTapTimeout { get; set; } = 300;
 		/// <summary>Long press time threshold in ms (default 500)</summary>
 		public long LongPressMs { get; set; } = 500;
+		/// <summary>Fling friction coefficient, higher = faster deceleration (default 3.5)</summary>
+		public float FlingFriction { get; set; } = 3.5f;
+		/// <summary>Minimum fling velocity threshold in px/s (default 50)</summary>
+		public float FlingMinVelocity { get; set; } = 50f;
+		/// <summary>Maximum fling velocity cap in px/s (default 8000)</summary>
+		public float FlingMaxVelocity { get; set; } = 8000f;
 		/// <summary>Max undo stack size, 0 = unlimited (default 512)</summary>
 		public ulong MaxUndoStackSize { get; set; } = 512;
 	}
@@ -578,6 +584,14 @@ namespace SweetEditor {
 		[JsonPropertyName("needs_edge_scroll")]
 		public bool NeedsEdgeScroll { get; set; }
 
+		/// <summary>Whether the platform should start/continue a fling animation callback.</summary>
+		[JsonPropertyName("needs_fling")]
+		public bool NeedsFling { get; set; }
+
+		/// <summary>Whether any animation is still active; platform can use a single callback.</summary>
+		[JsonPropertyName("needs_animation")]
+		public bool NeedsAnimation { get; set; }
+
 		/// <summary>Creates the default gesture result.</summary>
 		public GestureResult() {
 			Type = GestureType.UNDEFINED;
@@ -609,7 +623,9 @@ namespace SweetEditor {
 		/// <summary>Ghost text (used for Copilot code suggestions).</summary>
 		PHANTOM_TEXT,
 		/// <summary>Fold placeholder (" ... " at the end of the first line of a folded region).</summary>
-		FOLD_PLACEHOLDER
+		FOLD_PLACEHOLDER,
+		/// <summary>Tab character (width computed by core based on tab_size and column position).</summary>
+		TAB
 	}
 
 	/// <summary>
@@ -1248,6 +1264,9 @@ namespace SweetEditor {
 		/// <summary>Scrollbar alpha in [0, 1].</summary>
 		[JsonPropertyName("alpha")]
 		public float Alpha { get; set; }
+		/// <summary>Whether the thumb is currently being dragged.</summary>
+		[JsonPropertyName("thumb_active")]
+		public bool ThumbActive { get; set; }
 		/// <summary>Track rectangle.</summary>
 		[JsonPropertyName("track")]
 		public ScrollbarRect Track { get; set; }
@@ -1301,14 +1320,17 @@ namespace SweetEditor {
 		[DllImport(LibraryName, EntryPoint = "set_editor_viewport", CallingConvention = CallingConvention.Cdecl)]
 		internal static extern IntPtr SetViewport(IntPtr handle, int width, int height);
 
-		[DllImport(LibraryName, EntryPoint = "reset_editor_text_measurer", CallingConvention = CallingConvention.Cdecl)]
-		internal static extern void ResetEditorTextMeasurer(IntPtr handle);
+		[DllImport(LibraryName, EntryPoint = "editor_on_font_metrics_changed", CallingConvention = CallingConvention.Cdecl)]
+		internal static extern void OnFontMetricsChanged(IntPtr handle);
 
 		[DllImport(LibraryName, EntryPoint = "editor_set_fold_arrow_mode", CallingConvention = CallingConvention.Cdecl)]
 		internal static extern void SetFoldArrowMode(IntPtr handle, int mode);
 
 		[DllImport(LibraryName, EntryPoint = "editor_set_wrap_mode", CallingConvention = CallingConvention.Cdecl)]
 		internal static extern void SetWrapMode(IntPtr handle, int mode);
+
+		[DllImport(LibraryName, EntryPoint = "editor_set_tab_size", CallingConvention = CallingConvention.Cdecl)]
+		internal static extern void SetTabSize(IntPtr handle, int tabSize);
 
 		[DllImport(LibraryName, EntryPoint = "editor_set_scale", CallingConvention = CallingConvention.Cdecl)]
 		internal static extern void SetScale(IntPtr handle, float scale);
@@ -1334,6 +1356,9 @@ namespace SweetEditor {
 
 		[DllImport(LibraryName, EntryPoint = "editor_tick_edge_scroll", CallingConvention = CallingConvention.Cdecl)]
 		internal static extern IntPtr TickEdgeScroll(IntPtr handle, out UIntPtr outSize);
+
+		[DllImport(LibraryName, EntryPoint = "editor_tick_animations", CallingConvention = CallingConvention.Cdecl)]
+		internal static extern IntPtr TickAnimations(IntPtr handle, out UIntPtr outSize);
 
 		[DllImport(LibraryName, EntryPoint = "handle_editor_key_event", CallingConvention = CallingConvention.Cdecl)]
 		internal static extern IntPtr HandleKeyEvent(IntPtr handle, ushort keyCode, [MarshalAs(UnmanagedType.LPUTF8Str)] string? text, byte modifiers, out UIntPtr outSize);
@@ -1728,9 +1753,9 @@ namespace SweetEditor {
 			NativeMethods.SetViewport(nativeHandle, width, height);
 		}
 
-		/// <summary>Resets the text measurement cache (call after font/DPI changes so the next BuildRenderModel re-measures text).</summary>
-		public void ResetMeasurer() {
-			NativeMethods.ResetEditorTextMeasurer(nativeHandle);
+		/// <summary>Notifies the editor that font metrics have changed (call after font/scale/DPI changes).</summary>
+		public void OnFontMetricsChanged() {
+			NativeMethods.OnFontMetricsChanged(nativeHandle);
 		}
 
 		/// <summary>Sets fold-arrow display mode.</summary>
@@ -1743,6 +1768,12 @@ namespace SweetEditor {
 		/// <param name="mode">Mode value (0=NONE, 1=CHAR_BREAK, 2=WORD_BREAK)</param>
 		public void SetWrapMode(int mode) {
 			NativeMethods.SetWrapMode(nativeHandle, mode);
+		}
+
+		/// <summary>Sets tab size (number of spaces per tab stop).</summary>
+		/// <param name="tabSize">Tab size (default 4, minimum 1).</param>
+		public void SetTabSize(int tabSize) {
+			NativeMethods.SetTabSize(nativeHandle, tabSize);
 		}
 
 		/// <summary>Sets editor scale factor.</summary>
@@ -1808,6 +1839,12 @@ namespace SweetEditor {
 		/// <summary>Advances edge-scroll by one tick and returns an updated gesture result.</summary>
 		public GestureResult TickEdgeScroll() {
 			IntPtr payloadPtr = NativeMethods.TickEdgeScroll(nativeHandle, out UIntPtr payloadSize);
+			return ProtocolDecoder.ParseGestureResult(payloadPtr, payloadSize);
+		}
+
+		/// <summary>Unified animation tick: advances all active animations (edge-scroll, fling).</summary>
+		public GestureResult TickAnimations() {
+			IntPtr payloadPtr = NativeMethods.TickAnimations(nativeHandle, out UIntPtr payloadSize);
 			return ProtocolDecoder.ParseGestureResult(payloadPtr, payloadSize);
 		}
 

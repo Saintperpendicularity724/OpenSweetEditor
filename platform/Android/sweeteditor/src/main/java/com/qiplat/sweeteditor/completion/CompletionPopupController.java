@@ -2,9 +2,11 @@ package com.qiplat.sweeteditor.completion;
 
 import android.content.Context;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.GradientDrawable;
+import android.text.TextUtils;
 import android.view.Gravity;
-import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
@@ -15,6 +17,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+
+import com.qiplat.sweeteditor.EditorTheme;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -31,7 +35,7 @@ public class CompletionPopupController implements CompletionProviderManager.Comp
 
     private static final int MAX_VISIBLE_ITEMS = 6;
     private static final int ITEM_HEIGHT_DP = 32;
-    private static final int POPUP_WIDTH_DP = 280;
+    private static final int POPUP_WIDTH_DP = 300;
     private static final int GAP_DP = 4;
 
     private final Context context;
@@ -45,15 +49,42 @@ public class CompletionPopupController implements CompletionProviderManager.Comp
     private final List<CompletionItem> items = new ArrayList<>();
     private int selectedIndex = 0;
 
-    // Cached cursor screen coordinates (updated by external every frame)
+    private int panelBgColor;
+    private int panelBorderColor;
+    private int selectedBgColor;
+    private int labelColor;
+    private int detailColor;
+
     private float cachedCursorX = 0;
     private float cachedCursorY = 0;
     private float cachedCursorHeight = 0;
 
-    public CompletionPopupController(@NonNull Context context, @NonNull View anchorView) {
+    public CompletionPopupController(@NonNull Context context, @NonNull View anchorView, @NonNull EditorTheme theme) {
         this.context = context;
         this.anchorView = anchorView;
+        panelBgColor = theme.completionBgColor;
+        panelBorderColor = theme.completionBorderColor;
+        selectedBgColor = theme.completionSelectedBgColor;
+        labelColor = theme.completionLabelColor;
+        detailColor = theme.completionDetailColor;
         initPopup();
+    }
+
+    public void applyTheme(@NonNull EditorTheme theme) {
+        panelBgColor = theme.completionBgColor;
+        panelBorderColor = theme.completionBorderColor;
+        selectedBgColor = theme.completionSelectedBgColor;
+        labelColor = theme.completionLabelColor;
+        detailColor = theme.completionDetailColor;
+        if (recyclerView != null) {
+            GradientDrawable panelBg = new GradientDrawable();
+            panelBg.setColor(panelBgColor);
+            panelBg.setCornerRadius(dpToPx(context, 12));
+            panelBg.setStroke(dpToPx(context, 1), panelBorderColor);
+            recyclerView.setBackground(panelBg);
+            recyclerView.setClipToOutline(true);
+        }
+        if (adapter != null) adapter.notifyDataSetChanged();
     }
 
     public void setConfirmListener(@Nullable CompletionConfirmListener listener) {
@@ -68,8 +99,6 @@ public class CompletionPopupController implements CompletionProviderManager.Comp
     public boolean isShowing() {
         return popupWindow != null && popupWindow.isShowing();
     }
-
-    // ==================== CompletionUpdateListener ====================
 
     @Override
     public void onCompletionItemsUpdated(@NonNull List<CompletionItem> newItems) {
@@ -87,34 +116,6 @@ public class CompletionPopupController implements CompletionProviderManager.Comp
     @Override
     public void onCompletionDismissed() {
         dismiss();
-    }
-
-    // ==================== Keyboard Navigation ====================
-
-    public boolean handleKeyDown(int keyCode) {
-        if (!isShowing() || items.isEmpty()) return false;
-
-        // Enter = 13 (KEYCODE_ENTER = 66, but here receives the mapped native keyCode)
-        if (keyCode == 13) {
-            confirmSelected();
-            return true;
-        }
-        // Escape = 27
-        if (keyCode == 27) {
-            dismiss();
-            return true;
-        }
-        // Up = 38
-        if (keyCode == 38) {
-            moveSelection(-1);
-            return true;
-        }
-        // Down = 40
-        if (keyCode == 40) {
-            moveSelection(1);
-            return true;
-        }
-        return false;
     }
 
     /**
@@ -140,8 +141,6 @@ public class CompletionPopupController implements CompletionProviderManager.Comp
         }
     }
 
-    // ==================== Panel Positioning ====================
-
     /**
      * Update cached cursor screen coordinates (called by SweetEditor every frame in onDraw).
      * If panel is showing, also refresh panel position.
@@ -160,10 +159,10 @@ public class CompletionPopupController implements CompletionProviderManager.Comp
      * cachedCursorX/Y are coordinates within anchorView, need to be converted to screen coordinates for PopupWindow positioning.
      */
     private void applyPosition() {
-        int gap = dpToPx(GAP_DP);
+        int gap = dpToPx(context, GAP_DP);
         int popupHeight = popupWindow.getHeight();
-        if (popupHeight <= 0) popupHeight = dpToPx(ITEM_HEIGHT_DP * Math.min(items.size(), MAX_VISIBLE_ITEMS));
-        int popupWidth = dpToPx(POPUP_WIDTH_DP);
+        if (popupHeight <= 0) popupHeight = dpToPx(context, ITEM_HEIGHT_DP * Math.min(items.size(), MAX_VISIBLE_ITEMS));
+        int popupWidth = dpToPx(context, POPUP_WIDTH_DP);
 
         // Convert View-relative coordinates to screen coordinates
         int[] anchorLocation = new int[2];
@@ -199,25 +198,32 @@ public class CompletionPopupController implements CompletionProviderManager.Comp
         }
     }
 
-    // ==================== Internal Implementation ====================
-
     private void initPopup() {
         recyclerView = new RecyclerView(context);
         recyclerView.setLayoutManager(new LinearLayoutManager(context));
-        recyclerView.setBackgroundColor(0xFFF5F5F5);
+
+        GradientDrawable panelBg = new GradientDrawable();
+        panelBg.setColor(panelBgColor);
+        panelBg.setCornerRadius(dpToPx(context, 12));
+        panelBg.setStroke(dpToPx(context, 1), panelBorderColor);
+        recyclerView.setBackground(panelBg);
+        recyclerView.setClipToOutline(true);
+        recyclerView.setPadding(dpToPx(context, 4), dpToPx(context, 6), dpToPx(context, 4), dpToPx(context, 6));
+        recyclerView.setClipToPadding(false);
+
         adapter = new CompletionAdapter();
         recyclerView.setAdapter(adapter);
 
-        int width = dpToPx(POPUP_WIDTH_DP);
+        int width = dpToPx(context, POPUP_WIDTH_DP);
         popupWindow = new PopupWindow(recyclerView, width, ViewGroup.LayoutParams.WRAP_CONTENT);
         popupWindow.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         popupWindow.setOutsideTouchable(true);
         popupWindow.setFocusable(false);
-        popupWindow.setElevation(dpToPx(4));
+        popupWindow.setElevation(dpToPx(context, 8));
     }
 
     private void show() {
-        int maxHeight = dpToPx(ITEM_HEIGHT_DP * Math.min(items.size(), MAX_VISIBLE_ITEMS));
+        int maxHeight = dpToPx(context, ITEM_HEIGHT_DP * Math.min(items.size(), MAX_VISIBLE_ITEMS));
         popupWindow.setHeight(maxHeight);
         if (!popupWindow.isShowing()) {
             popupWindow.showAtLocation(anchorView, Gravity.NO_GRAVITY, 0, 0);
@@ -247,11 +253,9 @@ public class CompletionPopupController implements CompletionProviderManager.Comp
         }
     }
 
-    private int dpToPx(int dp) {
-        return (int) (dp * context.getResources().getDisplayMetrics().density + 0.5f);
+    private static int dpToPx(@NonNull Context ctx, int dp) {
+        return (int) (dp * ctx.getResources().getDisplayMetrics().density + 0.5f);
     }
-
-    // ==================== RecyclerView Adapter ====================
 
     private class CompletionAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
@@ -277,7 +281,7 @@ public class CompletionPopupController implements CompletionProviderManager.Comp
             if (factory != null) {
                 factory.bindItemView(holder.itemView, item, isSelected);
             } else {
-                ((DefaultViewHolder) holder).bind(item, isSelected);
+                ((DefaultViewHolder) holder).bind(item, isSelected, selectedBgColor, labelColor, detailColor);
             }
             holder.itemView.setOnClickListener(v -> {
                 selectedIndex = position;
@@ -291,53 +295,106 @@ public class CompletionPopupController implements CompletionProviderManager.Comp
         }
     }
 
-    // ==================== Default ViewHolder ====================
-
     private static class DefaultViewHolder extends RecyclerView.ViewHolder {
+        private final TextView kindBadge;
         private final ImageView iconView;
         private final TextView labelView;
         private final TextView detailView;
+        private final GradientDrawable rowBg;
+        private final GradientDrawable badgeBg;
 
         DefaultViewHolder(@NonNull ViewGroup parent) {
             super(createDefaultItemView(parent.getContext()));
+            kindBadge = itemView.findViewWithTag("kindBadge");
             iconView = itemView.findViewWithTag("icon");
             labelView = itemView.findViewWithTag("label");
             detailView = itemView.findViewWithTag("detail");
+
+            rowBg = new GradientDrawable();
+            rowBg.setCornerRadius(dpToPx(parent.getContext(), 6));
+            itemView.setBackground(rowBg);
+
+            badgeBg = new GradientDrawable();
+            badgeBg.setCornerRadius(dpToPx(parent.getContext(), 4));
+            kindBadge.setBackground(badgeBg);
         }
 
-        void bind(@NonNull CompletionItem item, boolean isSelected) {
-            labelView.setText(item.getLabel());
-            if (item.getDetail() != null) {
+        void bind(@NonNull CompletionItem item, boolean isSelected, int selectedColor, int lblColor, int dtlColor) {
+            labelView.setText(item.label);
+            labelView.setTextColor(lblColor);
+            if (item.detail != null && !item.detail.isEmpty()) {
                 detailView.setVisibility(View.VISIBLE);
-                detailView.setText(item.getDetail());
+                detailView.setText(item.detail);
+                detailView.setTextColor(dtlColor);
             } else {
                 detailView.setVisibility(View.GONE);
             }
-            itemView.setBackgroundColor(isSelected ? 0xFFD0E8FF : 0xFFF5F5F5);
-            if (item.getIconId() != 0) {
-                iconView.setVisibility(View.VISIBLE);
-                iconView.setImageResource(item.getIconId());
-            } else {
-                iconView.setVisibility(View.GONE);
+
+            rowBg.setColor(isSelected ? selectedColor : Color.TRANSPARENT);
+
+            iconView.setVisibility(View.GONE);
+            kindBadge.setVisibility(View.VISIBLE);
+            applyKindBadge(kindBadge, item.kind);
+        }
+
+        private static void applyKindBadge(TextView badge, int kind) {
+            int color;
+            String letter;
+            switch (kind) {
+                case CompletionItem.KIND_KEYWORD:
+                    color = 0xFFC678DD; letter = "K"; break;
+                case CompletionItem.KIND_FUNCTION:
+                    color = 0xFF61AFEF; letter = "F"; break;
+                case CompletionItem.KIND_VARIABLE:
+                    color = 0xFFE5C07B; letter = "V"; break;
+                case CompletionItem.KIND_CLASS:
+                    color = 0xFFE06C75; letter = "C"; break;
+                case CompletionItem.KIND_INTERFACE:
+                    color = 0xFF56B6C2; letter = "I"; break;
+                case CompletionItem.KIND_MODULE:
+                    color = 0xFFD19A66; letter = "M"; break;
+                case CompletionItem.KIND_PROPERTY:
+                    color = 0xFF98C379; letter = "P"; break;
+                case CompletionItem.KIND_SNIPPET:
+                    color = 0xFFBE5046; letter = "S"; break;
+                default:
+                    color = 0xFF7A8494; letter = "T"; break;
             }
+            badge.setText(letter);
+            GradientDrawable bg = (GradientDrawable) badge.getBackground();
+            bg.setColor(color);
         }
 
         private static View createDefaultItemView(@NonNull Context context) {
             float density = context.getResources().getDisplayMetrics().density;
-            int padding = (int) (6 * density);
-            int height = (int) (32 * density);
+            int hPadding = (int) (8 * density);
+            int vPadding = (int) (2 * density);
+            int height = (int) (ITEM_HEIGHT_DP * density);
 
             android.widget.LinearLayout layout = new android.widget.LinearLayout(context);
             layout.setOrientation(android.widget.LinearLayout.HORIZONTAL);
             layout.setGravity(Gravity.CENTER_VERTICAL);
-            layout.setPadding(padding, 0, padding, 0);
+            layout.setPadding(hPadding, vPadding, hPadding, vPadding);
             layout.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, height));
+
+            TextView kindBadge = new TextView(context);
+            int badgeSize = (int) (18 * density);
+            android.widget.LinearLayout.LayoutParams badgeLp =
+                    new android.widget.LinearLayout.LayoutParams(badgeSize, badgeSize);
+            badgeLp.setMarginEnd((int) (8 * density));
+            kindBadge.setLayoutParams(badgeLp);
+            kindBadge.setGravity(Gravity.CENTER);
+            kindBadge.setTextSize(10);
+            kindBadge.setTextColor(0xFFFFFFFF);
+            kindBadge.setTypeface(Typeface.DEFAULT_BOLD);
+            kindBadge.setTag("kindBadge");
+            layout.addView(kindBadge);
 
             ImageView icon = new ImageView(context);
             int iconSize = (int) (16 * density);
             android.widget.LinearLayout.LayoutParams iconLp =
                     new android.widget.LinearLayout.LayoutParams(iconSize, iconSize);
-            iconLp.setMarginEnd((int) (4 * density));
+            iconLp.setMarginEnd((int) (8 * density));
             icon.setLayoutParams(iconLp);
             icon.setTag("icon");
             icon.setVisibility(View.GONE);
@@ -345,8 +402,9 @@ public class CompletionPopupController implements CompletionProviderManager.Comp
 
             TextView label = new TextView(context);
             label.setTextSize(13);
-            label.setTextColor(0xFF333333);
+            label.setTextColor(0xFFD8DEE9);
             label.setSingleLine(true);
+            label.setEllipsize(TextUtils.TruncateAt.END);
             label.setTag("label");
             android.widget.LinearLayout.LayoutParams labelLp =
                     new android.widget.LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
@@ -355,8 +413,9 @@ public class CompletionPopupController implements CompletionProviderManager.Comp
 
             TextView detail = new TextView(context);
             detail.setTextSize(11);
-            detail.setTextColor(0xFF999999);
+            detail.setTextColor(0xFF7A8494);
             detail.setSingleLine(true);
+            detail.setEllipsize(TextUtils.TruncateAt.END);
             detail.setTag("detail");
             detail.setVisibility(View.GONE);
             android.widget.LinearLayout.LayoutParams detailLp =

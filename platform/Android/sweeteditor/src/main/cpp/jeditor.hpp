@@ -182,13 +182,16 @@ public:
   static jlong makeEditorCore(JNIEnv* env, jclass clazz, jobject measurer, jobject options_buffer, jint options_size) {
     // Zero-copy decode: get direct ByteBuffer address
     EditorOptions editor_options;
-    if (options_buffer != nullptr && options_size >= 28) {
+    if (options_buffer != nullptr && options_size >= 40) {
       auto* data_ptr = reinterpret_cast<const uint8_t*>(env->GetDirectBufferAddress(options_buffer));
       if (data_ptr != nullptr) {
         size_t offset = 0;
         std::memcpy(&editor_options.touch_slop, data_ptr + offset, sizeof(float)); offset += sizeof(float);
         std::memcpy(&editor_options.double_tap_timeout, data_ptr + offset, sizeof(int64_t)); offset += sizeof(int64_t);
         std::memcpy(&editor_options.long_press_ms, data_ptr + offset, sizeof(int64_t)); offset += sizeof(int64_t);
+        std::memcpy(&editor_options.fling_friction, data_ptr + offset, sizeof(float)); offset += sizeof(float);
+        std::memcpy(&editor_options.fling_min_velocity, data_ptr + offset, sizeof(float)); offset += sizeof(float);
+        std::memcpy(&editor_options.fling_max_velocity, data_ptr + offset, sizeof(float)); offset += sizeof(float);
         uint64_t max_undo = 0;
         std::memcpy(&max_undo, data_ptr + offset, sizeof(uint64_t));
         editor_options.max_undo_stack_size = static_cast<size_t>(max_undo);
@@ -228,14 +231,28 @@ public:
     return wrapBinaryPayload(env, payload, out_size);
   }
 
-  static void resetMeasurer(jlong handle) {
-    reset_editor_text_measurer(static_cast<intptr_t>(handle));
+  static void onFontMetricsChanged(jlong handle) {
+    editor_on_font_metrics_changed(static_cast<intptr_t>(handle));
   }
 
   static jobject tickEdgeScroll(JNIEnv* env, jclass clazz, jlong handle) {
     if (handle == 0) return nullptr;
     size_t out_size = 0;
     const uint8_t* payload = editor_tick_edge_scroll(static_cast<intptr_t>(handle), &out_size);
+    return wrapBinaryPayload(env, payload, out_size);
+  }
+
+  static jobject tickFling(JNIEnv* env, jclass clazz, jlong handle) {
+    if (handle == 0) return nullptr;
+    size_t out_size = 0;
+    const uint8_t* payload = editor_tick_fling(static_cast<intptr_t>(handle), &out_size);
+    return wrapBinaryPayload(env, payload, out_size);
+  }
+
+  static jobject tickAnimations(JNIEnv* env, jclass clazz, jlong handle) {
+    if (handle == 0) return nullptr;
+    size_t out_size = 0;
+    const uint8_t* payload = editor_tick_animations(static_cast<intptr_t>(handle), &out_size);
     return wrapBinaryPayload(env, payload, out_size);
   }
 
@@ -650,6 +667,10 @@ public:
     editor_set_wrap_mode(static_cast<intptr_t>(handle), static_cast<int>(mode));
   }
 
+  static void setTabSize(jlong handle, jint tab_size) {
+    editor_set_tab_size(static_cast<intptr_t>(handle), static_cast<int>(tab_size));
+  }
+
   static void setScale(jlong handle, jfloat scale) {
     Ptr<EditorCore> editor_core = getCPtrHolderValue<EditorCore>(handle);
     if (editor_core == nullptr) return;
@@ -821,7 +842,9 @@ public:
       {"nativeLoadDocument", "(JJ)V", (void*) loadDocument},
       {"nativeHandleGestureEvent", "(JII[F)Ljava/nio/ByteBuffer;", (void*) handleGestureEvent},
       {"nativeTickEdgeScroll", "(J)Ljava/nio/ByteBuffer;", (void*) tickEdgeScroll},
-      {"nativeResetMeasurer", "(J)V", (void*) resetMeasurer},
+      {"nativeTickFling", "(J)Ljava/nio/ByteBuffer;", (void*) tickFling},
+      {"nativeTickAnimations", "(J)Ljava/nio/ByteBuffer;", (void*) tickAnimations},
+      {"nativeOnFontMetricsChanged", "(J)V", (void*) onFontMetricsChanged},
       {"nativeBuildRenderModel", "(J)Ljava/nio/ByteBuffer;", (void*) buildRenderModel},
       {"nativeHandleKeyEvent", "(JILjava/lang/String;I)Ljava/nio/ByteBuffer;", (void*) handleKeyEvent},
       {"nativeInsertText", "(JLjava/lang/String;)Ljava/nio/ByteBuffer;", (void*) insertText},
@@ -886,6 +909,7 @@ public:
       {"nativeSetMaxGutterIcons", "(JI)V", (void*) setMaxGutterIcons},
       {"nativeSetFoldArrowMode", "(JI)V", (void*) setFoldArrowMode},
       {"nativeSetWrapMode", "(JI)V", (void*) setWrapMode},
+      {"nativeSetTabSize", "(JI)V", (void*) setTabSize},
       {"nativeSetScale", "(JF)V", (void*) setScale},
       {"nativeSetLineSpacing", "(JFF)V", (void*) setLineSpacing},
       {"nativeSetContentStartPadding", "(JF)V", (void*) setContentStartPadding},

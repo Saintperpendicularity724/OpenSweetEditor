@@ -131,6 +131,8 @@ namespace SweetEditor {
 		public Color ScrollbarTrackColor { get; set; } = Color.FromArgb(unchecked((int)0x48FFFFFF));
 		/// <summary>Scrollbar thumb color (ARGB).</summary>
 		public Color ScrollbarThumbColor { get; set; } = Color.FromArgb(unchecked((int)0xAA858585));
+		/// <summary>Scrollbar thumb active (dragging) color (ARGB).</summary>
+public Color ScrollbarThumbActiveColor { get; set; } = Color.FromArgb(unchecked((int)0xFFBBBBBB));
 
 		/// <summary>IME composition underline color (ARGB).</summary>
 		public Color CompositionColor { get; set; }
@@ -170,6 +172,17 @@ namespace SweetEditor {
 		/// <summary>Bracket match highlight background color (ARGB, typically semi-transparent).</summary>
 		public Color BracketHighlightBgColor { get; set; }
 
+		/// <summary>Completion popup background color.</summary>
+		public Color CompletionBgColor { get; set; }
+		/// <summary>Completion popup border color.</summary>
+		public Color CompletionBorderColor { get; set; }
+		/// <summary>Completion popup selected row highlight color.</summary>
+		public Color CompletionSelectedBgColor { get; set; }
+		/// <summary>Completion popup label text color.</summary>
+		public Color CompletionLabelColor { get; set; }
+		/// <summary>Completion popup detail text color.</summary>
+		public Color CompletionDetailColor { get; set; }
+
 		/// <summary>
 		/// Theme text style mapping.
 		/// Key: style ID. Value: text style definition.
@@ -204,6 +217,7 @@ namespace SweetEditor {
 			SplitLineColor = Color.FromArgb(unchecked((int)0x3356617A)),
 			ScrollbarTrackColor = Color.FromArgb(unchecked((int)0x2AFFFFFF)),
 			ScrollbarThumbColor = Color.FromArgb(unchecked((int)0x9A7282A0)),
+ScrollbarThumbActiveColor = Color.FromArgb(unchecked((int)0xFFAABEDD)),
 			CompositionColor = Color.FromArgb(unchecked((int)0xFF7AA2F7)),
 			InlayHintBgColor = Color.FromArgb(unchecked((int)0x223A4A66)),
 			InlayHintTextColor = Color.FromArgb(unchecked((int)0xC0AFC2E0)),
@@ -219,6 +233,11 @@ namespace SweetEditor {
 			LinkedEditingInactiveColor = Color.FromArgb(unchecked((int)0x667AA2F7)),
 			BracketHighlightBorderColor = Color.FromArgb(unchecked((int)0xCC9ECE6A)),
 			BracketHighlightBgColor = Color.FromArgb(unchecked((int)0x2A9ECE6A)),
+			CompletionBgColor = Color.FromArgb(unchecked((int)0xF0252830)),
+			CompletionBorderColor = Color.FromArgb(unchecked((int)0x40607090)),
+			CompletionSelectedBgColor = Color.FromArgb(unchecked((int)0x3D5580BB)),
+			CompletionLabelColor = Color.FromArgb(unchecked((int)0xFFD8DEE9)),
+			CompletionDetailColor = Color.FromArgb(unchecked((int)0xFF7A8494)),
 			TextStyles = new() {
 				[STYLE_KEYWORD] = new TextStyle(unchecked((int)0xFF7AA2F7), 1),
 				[STYLE_STRING] = new TextStyle(unchecked((int)0xFF9ECE6A), 0),
@@ -251,6 +270,7 @@ namespace SweetEditor {
 			SplitLineColor = Color.FromArgb(unchecked((int)0x1F29426B)),
 			ScrollbarTrackColor = Color.FromArgb(unchecked((int)0x1F2A3B55)),
 			ScrollbarThumbColor = Color.FromArgb(unchecked((int)0x80446C9C)),
+ScrollbarThumbActiveColor = Color.FromArgb(unchecked((int)0xEE6A9AD0)),
 			CompositionColor = Color.FromArgb(unchecked((int)0xFF2563EB)),
 			InlayHintBgColor = Color.FromArgb(unchecked((int)0x143B82F6)),
 			InlayHintTextColor = Color.FromArgb(unchecked((int)0xB0344A73)),
@@ -266,6 +286,11 @@ namespace SweetEditor {
 			LinkedEditingInactiveColor = Color.FromArgb(unchecked((int)0x662563EB)),
 			BracketHighlightBorderColor = Color.FromArgb(unchecked((int)0xCC0F766E)),
 			BracketHighlightBgColor = Color.FromArgb(unchecked((int)0x260F766E)),
+			CompletionBgColor = Color.FromArgb(unchecked((int)0xF0FAFBFD)),
+			CompletionBorderColor = Color.FromArgb(unchecked((int)0x30A0A8B8)),
+			CompletionSelectedBgColor = Color.FromArgb(unchecked((int)0x3D3B82F6)),
+			CompletionLabelColor = Color.FromArgb(unchecked((int)0xFF1F2937)),
+			CompletionDetailColor = Color.FromArgb(unchecked((int)0xFF8A94A6)),
 			TextStyles = new() {
 				[STYLE_KEYWORD] = new TextStyle(unchecked((int)0xFF3559D6), 1),
 				[STYLE_STRING] = new TextStyle(unchecked((int)0xFF0F7B6C), 0),
@@ -434,10 +459,10 @@ namespace SweetEditor {
 
 		private EditorSettings? settings;
 
-		// Edge-scroll timer for auto-scrolling during mouse drag selection
-		private const int EdgeScrollIntervalMs = 16;
-		private System.Windows.Forms.Timer? edgeScrollTimer;
-		private bool edgeScrollActive = false;
+		// Unified animation timer: drives edge-scroll, fling, etc. at ~16ms
+		private const int AnimationIntervalMs = 16;
+		private System.Windows.Forms.Timer? animationTimer;
+		private bool animationActive = false;
 		private const float DefaultContentStartPaddingDp = 3.0f;
 
 		public EditorControl() {
@@ -472,12 +497,13 @@ namespace SweetEditor {
 			this.BackColor = currentTheme.BackgroundColor;
 			this.ForeColor = currentTheme.TextColor;
 
-			// Re-register text styles to C++ core after theme change.
 			if (editorCore != null) {
 				foreach (var kvp in theme.TextStyles) {
 					editorCore.registerTextStyle(kvp.Key, kvp.Value.Color, kvp.Value.BackgroundColor, kvp.Value.FontStyle);
 				}
 			}
+
+			completionPopupController?.ApplyTheme(theme);
 
 			Flush();
 		}
@@ -506,14 +532,19 @@ namespace SweetEditor {
 		/// <summary>Sets language configuration.</summary>
 		public void SetLanguageConfiguration(LanguageConfiguration? config) {
 			languageConfiguration = config;
-			if (config != null && config.Brackets.Count > 0) {
-				int[] opens = new int[config.Brackets.Count];
-				int[] closes = new int[config.Brackets.Count];
-				for (int i = 0; i < config.Brackets.Count; i++) {
-					opens[i] = string.IsNullOrEmpty(config.Brackets[i].Open) ? 0 : char.ConvertToUtf32(config.Brackets[i].Open, 0);
-					closes[i] = string.IsNullOrEmpty(config.Brackets[i].Close) ? 0 : char.ConvertToUtf32(config.Brackets[i].Close, 0);
+			if (config != null) {
+				if (config.Brackets.Count > 0) {
+					int[] opens = new int[config.Brackets.Count];
+					int[] closes = new int[config.Brackets.Count];
+					for (int i = 0; i < config.Brackets.Count; i++) {
+						opens[i] = string.IsNullOrEmpty(config.Brackets[i].Open) ? 0 : char.ConvertToUtf32(config.Brackets[i].Open, 0);
+						closes[i] = string.IsNullOrEmpty(config.Brackets[i].Close) ? 0 : char.ConvertToUtf32(config.Brackets[i].Close, 0);
+					}
+					editorCore.SetBracketPairs(opens, closes);
 				}
-				editorCore.SetBracketPairs(opens, closes);
+				if (config.TabSize.HasValue && config.TabSize.Value > 0) {
+					editorCore.SetTabSize(config.TabSize.Value);
+				}
 			}
 		}
 
@@ -1024,7 +1055,7 @@ namespace SweetEditor {
 
 			// Completion manager and popup controller.
 			completionProviderManager = new CompletionProviderManager(this);
-			completionPopupController = new CompletionPopupController(this);
+			completionPopupController = new CompletionPopupController(this, currentTheme);
 			completionProviderManager.OnItemsUpdated += items => {
 				UpdateCompletionPopupCursorAnchor();
 				completionPopupController.UpdateItems(items);
@@ -1045,7 +1076,7 @@ namespace SweetEditor {
 			base.OnHandleCreated(e);
 			if (IsDesignMode() || editorCore == null) return;
 			renderer.RecreateTextGraphics(this);
-			editorCore.ResetMeasurer();
+			editorCore.OnFontMetricsChanged();
 			Flush();
 		}
 
@@ -1268,7 +1299,7 @@ namespace SweetEditor {
 				});
 				FireGestureEvents(gestureResult, new System.Drawing.PointF(e.X, e.Y));
 				Flush();
-				UpdateEdgeScrollTimer(gestureResult.NeedsEdgeScroll);
+			UpdateAnimationTimer(gestureResult.NeedsAnimation);
 			} else if (e.Button == MouseButtons.Right) {
 				GestureResult gestureResult = editorCore.HandleGestureEvent(new GestureEvent {
 					Type = EventType.MOUSE_RIGHT_DOWN,
@@ -1293,8 +1324,8 @@ namespace SweetEditor {
 					DirectScale = 1
 				});
 				FireGestureEvents(gestureResult, new System.Drawing.PointF(e.X, e.Y));
-				Flush();
-				UpdateEdgeScrollTimer(gestureResult.NeedsEdgeScroll);
+			Flush();
+				UpdateAnimationTimer(gestureResult.NeedsAnimation);
 			}
 			base.OnMouseMove(e);
 		}
@@ -1309,8 +1340,8 @@ namespace SweetEditor {
 					Modifiers = mods,
 					DirectScale = 1
 				});
-				FireGestureEvents(gestureResult, new System.Drawing.PointF(e.X, e.Y));
-				UpdateEdgeScrollTimer(false);
+			FireGestureEvents(gestureResult, new System.Drawing.PointF(e.X, e.Y));
+				UpdateAnimationTimer(gestureResult.NeedsAnimation);
 			}
 			base.OnMouseUp(e);
 		}
@@ -1331,29 +1362,29 @@ namespace SweetEditor {
 			base.OnMouseWheel(e);
 		}
 
-		private void InitEdgeScrollTimer() {
-			edgeScrollTimer = new System.Windows.Forms.Timer();
-			edgeScrollTimer.Interval = EdgeScrollIntervalMs;
-			edgeScrollTimer.Tick += (_, _) => {
-				if (!edgeScrollActive) return;
-				GestureResult result = editorCore.TickEdgeScroll();
+		private void InitAnimationTimer() {
+			animationTimer = new System.Windows.Forms.Timer();
+			animationTimer.Interval = AnimationIntervalMs;
+			animationTimer.Tick += (_, _) => {
+				if (!animationActive) return;
+				GestureResult result = editorCore.TickAnimations();
 				FireGestureEvents(result, System.Drawing.PointF.Empty);
 				Flush();
-				if (!result.NeedsEdgeScroll) {
-					edgeScrollActive = false;
-					edgeScrollTimer.Stop();
+				if (!result.NeedsAnimation) {
+					animationActive = false;
+					animationTimer.Stop();
 				}
 			};
 		}
 
-		private void UpdateEdgeScrollTimer(bool needsEdgeScroll) {
-			if (edgeScrollTimer == null) InitEdgeScrollTimer();
-			if (needsEdgeScroll && !edgeScrollActive) {
-				edgeScrollActive = true;
-				edgeScrollTimer!.Start();
-			} else if (!needsEdgeScroll && edgeScrollActive) {
-				edgeScrollActive = false;
-				edgeScrollTimer!.Stop();
+		private void UpdateAnimationTimer(bool needsAnimation) {
+			if (animationTimer == null) InitAnimationTimer();
+			if (needsAnimation && !animationActive) {
+				animationActive = true;
+				animationTimer!.Start();
+			} else if (!needsAnimation && animationActive) {
+				animationActive = false;
+				animationTimer!.Stop();
 			}
 		}
 
@@ -1537,12 +1568,12 @@ namespace SweetEditor {
 				int dpi = DeviceDpi;
 				if (dpi != lastMeasureDpi) {
 					renderer.RecreateTextGraphics(this);
-					editorCore.ResetMeasurer();
+					editorCore.OnFontMetricsChanged();
 					lastMeasureDpi = dpi;
 				}
 				if (renderer.GetTextGraphics() == null) {
 					renderer.RecreateTextGraphics(this);
-					editorCore.ResetMeasurer();
+					editorCore.OnFontMetricsChanged();
 				}
 				perf.Mark(PerfStepRecorder.StepPrep);
 			}
@@ -1577,7 +1608,7 @@ namespace SweetEditor {
 			renderer.SyncPlatformScale(scale);
 			Font = renderer.RegularFont;
 			if (editorCore != null) {
-				editorCore.ResetMeasurer();
+				editorCore.OnFontMetricsChanged();
 			}
 		}
 

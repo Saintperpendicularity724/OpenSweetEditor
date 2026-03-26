@@ -6,5 +6,6 @@ public enum VisualRunType {
     NEWLINE,
     INLAY_HINT,
     PHANTOM_TEXT,
-    FOLD_PLACEHOLDER
+    FOLD_PLACEHOLDER,
+    TAB
 }

@@ -1,24 +1,35 @@
 package com.qiplat.sweeteditor.demo;
 
+import android.graphics.Color;
+import android.graphics.PorterDuff;
 import android.graphics.Typeface;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.Window;
+import android.view.WindowInsetsController;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
-import android.widget.Button;
+import android.widget.ImageButton;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 import com.qiplat.sweeteditor.EditorSettings;
 import com.qiplat.sweeteditor.EditorTheme;
+import com.qiplat.sweeteditor.LanguageConfiguration;
 import com.qiplat.sweeteditor.SweetEditor;
 import com.qiplat.sweeteditor.copilot.InlineSuggestion;
 import com.qiplat.sweeteditor.core.Document;
@@ -43,8 +54,22 @@ public class MainActivity extends AppCompatActivity {
     private static final String DEMO_FILES_ASSET_DIR = "files";
     private static final String FALLBACK_FILE_NAME = "sample.cpp";
 
+    private static final int DARK_BG = 0xFF1B1E24;
+    private static final int DARK_FG = 0xFFD7DEE9;
+    private static final int DARK_SECONDARY = 0xFF5E6778;
+    private static final int LIGHT_BG = 0xFFFAFBFD;
+    private static final int LIGHT_FG = 0xFF1F2937;
+    private static final int LIGHT_SECONDARY = 0xFF8A94A6;
+
     private SweetEditor mEditor;
     private TextView mStatusBar;
+    private View mToolbarContainer;
+    private ImageButton mBtnUndo;
+    private ImageButton mBtnRedo;
+    private ImageButton mBtnTheme;
+    private ImageButton mBtnWrap;
+    private Spinner mFileSpinner;
+
     private boolean mIsDarkTheme = true;
     private WrapMode mWrapModePreset = WrapMode.NONE;
     private final List<String> mDemoFiles = new ArrayList<>();
@@ -57,14 +82,23 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        setupImmersiveWindow();
         setContentView(R.layout.activity_main);
 
         mEditor = findViewById(R.id.editor);
         mStatusBar = findViewById(R.id.tv_status);
+        mToolbarContainer = findViewById(R.id.toolbar_container);
+        mBtnUndo = findViewById(R.id.btn_undo);
+        mBtnRedo = findViewById(R.id.btn_redo);
+        mBtnTheme = findViewById(R.id.btn_switch_theme);
+        mBtnWrap = findViewById(R.id.btn_wrap_mode);
+        mFileSpinner = findViewById(R.id.spn_files);
+
+        applyToolbarInsets();
 
         EditorSettings settings = mEditor.getSettings();
         settings.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.NORMAL));
-        settings.setEditorTextSize(36f);
+        settings.setEditorTextSize(28f);
         settings.setFoldArrowMode(FoldArrowMode.AUTO);
         settings.setMaxGutterIcons(1);
         settings.setCurrentLineRenderMode(CurrentLineRenderMode.BORDER);
@@ -94,6 +128,98 @@ public class MainActivity extends AppCompatActivity {
         setupToolbar();
         setupFileSpinner();
         subscribeEditorEvents();
+        applyAppTheme();
+    }
+
+    private void setupImmersiveWindow() {
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+        Window window = getWindow();
+        window.setStatusBarColor(Color.TRANSPARENT);
+        window.setNavigationBarColor(Color.TRANSPARENT);
+    }
+
+    private void applyToolbarInsets() {
+        ViewCompat.setOnApplyWindowInsetsListener(mToolbarContainer, (v, insets) -> {
+            int top = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top;
+            v.setPadding(v.getPaddingLeft(), top + 6, v.getPaddingRight(), v.getPaddingBottom());
+            return insets;
+        });
+    }
+
+    private void applyAppTheme() {
+        int bg = mIsDarkTheme ? DARK_BG : LIGHT_BG;
+        int fg = mIsDarkTheme ? DARK_FG : LIGHT_FG;
+        int secondary = mIsDarkTheme ? DARK_SECONDARY : LIGHT_SECONDARY;
+
+        mToolbarContainer.setBackgroundColor(bg);
+        tintImageButton(mBtnUndo, fg);
+        tintImageButton(mBtnRedo, fg);
+        tintImageButton(mBtnTheme, fg);
+        tintImageButton(mBtnWrap, fg);
+
+        mStatusBar.setBackgroundColor(bg);
+        mStatusBar.setTextColor(secondary);
+
+        updateStatusBarAppearance();
+        updateSpinnerTheme(fg, bg);
+    }
+
+    private void tintImageButton(ImageButton btn, int color) {
+        btn.setColorFilter(color, PorterDuff.Mode.SRC_IN);
+    }
+
+    private void updateStatusBarAppearance() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            WindowInsetsController ctrl = getWindow().getInsetsController();
+            if (ctrl != null) {
+                if (mIsDarkTheme) {
+                    ctrl.setSystemBarsAppearance(0,
+                            WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS);
+                } else {
+                    ctrl.setSystemBarsAppearance(
+                            WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS,
+                            WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS);
+                }
+            }
+        } else {
+            View decorView = getWindow().getDecorView();
+            int flags = decorView.getSystemUiVisibility();
+            if (mIsDarkTheme) {
+                flags &= ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+            } else {
+                flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+            }
+            decorView.setSystemUiVisibility(flags);
+        }
+    }
+
+    private void updateSpinnerTheme(int textColor, int bgColor) {
+        ArrayAdapter<String> adapter = new ArrayAdapter<String>(this,
+                android.R.layout.simple_spinner_item, mDemoFiles) {
+            @NonNull
+            @Override
+            public View getView(int position, @Nullable View convertView, @NonNull ViewGroup parent) {
+                TextView tv = (TextView) super.getView(position, convertView, parent);
+                tv.setTextColor(textColor);
+                tv.setTextSize(13f);
+                return tv;
+            }
+
+            @Override
+            public View getDropDownView(int position, @Nullable View convertView, @NonNull ViewGroup parent) {
+                TextView tv = (TextView) super.getDropDownView(position, convertView, parent);
+                tv.setTextColor(textColor);
+                tv.setBackgroundColor(bgColor);
+                tv.setPadding(24, 20, 24, 20);
+                return tv;
+            }
+        };
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        int currentSelection = mFileSpinner.getSelectedItemPosition();
+        mFileSpinner.setAdapter(adapter);
+        if (currentSelection >= 0 && currentSelection < mDemoFiles.size()) {
+            mFileSpinner.setSelection(currentSelection);
+        }
     }
 
     private void subscribeEditorEvents() {
@@ -121,18 +247,18 @@ public class MainActivity extends AppCompatActivity {
 
         mEditor.setInlineSuggestionListener(new com.qiplat.sweeteditor.copilot.InlineSuggestionListener() {
             @Override
-            public void onSuggestionAccepted(@androidx.annotation.NonNull InlineSuggestion suggestion) {
+            public void onSuggestionAccepted(@NonNull InlineSuggestion suggestion) {
                 updateStatus("Accepted suggestion at line " + suggestion.line);
             }
 
             @Override
-            public void onSuggestionDismissed(@androidx.annotation.NonNull InlineSuggestion suggestion) {
+            public void onSuggestionDismissed(@NonNull InlineSuggestion suggestion) {
                 updateStatus("Dismissed suggestion at line " + suggestion.line);
             }
         });
     }
 
-    private void scheduleSuggestionIfAtLineEnd(@androidx.annotation.NonNull CursorChangedEvent event) {
+    private void scheduleSuggestionIfAtLineEnd(@NonNull CursorChangedEvent event) {
         cancelPendingSuggestion();
         Document doc = mEditor.getDocument();
         if (doc == null) {
@@ -162,17 +288,13 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupFileSpinner() {
-        Spinner fileSpinner = findViewById(R.id.spn_files);
         mDemoFiles.clear();
         mDemoFiles.addAll(listDemoFiles());
         if (mDemoFiles.isEmpty()) {
             mDemoFiles.add(FALLBACK_FILE_NAME);
         }
 
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, mDemoFiles);
-        fileSpinner.setAdapter(adapter);
-
-        fileSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+        mFileSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
                 if (position < 0 || position >= mDemoFiles.size()) {
@@ -183,13 +305,8 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onNothingSelected(AdapterView<?> parent) {
-                // no-op
             }
         });
-
-        if (!mDemoFiles.isEmpty()) {
-            fileSpinner.setSelection(0);
-        }
     }
 
     private List<String> listDemoFiles() {
@@ -207,7 +324,6 @@ public class MainActivity extends AppCompatActivity {
                 try (InputStream ignored = getAssets().open(assetPath)) {
                     files.add(name);
                 } catch (IOException ignored) {
-                    // Ignore directory entries under assets/files.
                 }
             }
             Collections.sort(files, String.CASE_INSENSITIVE_ORDER);
@@ -244,8 +360,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupToolbar() {
-        Button btnUndo = findViewById(R.id.btn_undo);
-        btnUndo.setOnClickListener(v -> {
+        mBtnUndo.setOnClickListener(v -> {
             if (mEditor.canUndo()) {
                 mEditor.undo();
                 updateStatus("Undo");
@@ -254,8 +369,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        Button btnRedo = findViewById(R.id.btn_redo);
-        btnRedo.setOnClickListener(v -> {
+        mBtnRedo.setOnClickListener(v -> {
             if (mEditor.canRedo()) {
                 mEditor.redo();
                 updateStatus("Redo");
@@ -264,16 +378,15 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        Button btnSwitchTheme = findViewById(R.id.btn_switch_theme);
-        btnSwitchTheme.setOnClickListener(v -> {
+        mBtnTheme.setOnClickListener(v -> {
             mIsDarkTheme = !mIsDarkTheme;
             mEditor.applyTheme(mIsDarkTheme ? EditorTheme.dark() : EditorTheme.light());
             registerColorStyleForCurrentTheme();
-            updateStatus(mIsDarkTheme ? "Switched to dark theme" : "Switched to light theme");
+            applyAppTheme();
+            updateStatus(mIsDarkTheme ? "Dark theme" : "Light theme");
         });
 
-        Button btnWrapMode = findViewById(R.id.btn_wrap_mode);
-        btnWrapMode.setOnClickListener(v -> cycleWrapMode());
+        mBtnWrap.setOnClickListener(v -> cycleWrapMode());
     }
 
     private void cycleWrapMode() {

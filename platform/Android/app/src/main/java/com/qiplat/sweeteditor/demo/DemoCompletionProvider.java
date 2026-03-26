@@ -42,36 +42,11 @@ public class DemoCompletionProvider implements CompletionProvider {
                 && ".".equals(context.triggerCharacter)) {
             // ── Synchronous push: member completion (simulates prompt after "obj.") ──
             List<CompletionItem> items = Arrays.asList(
-                    new CompletionItem.Builder("length")
-                            .detail("size_t")
-                            .kind(CompletionItem.KIND_PROPERTY)
-                            .insertText("length()")
-                            .sortKey("a_length")
-                            .build(),
-                    new CompletionItem.Builder("push_back")
-                            .detail("void push_back(T)")
-                            .kind(CompletionItem.KIND_FUNCTION)
-                            .insertText("push_back()")
-                            .sortKey("b_push_back")
-                            .build(),
-                    new CompletionItem.Builder("begin")
-                            .detail("iterator")
-                            .kind(CompletionItem.KIND_FUNCTION)
-                            .insertText("begin()")
-                            .sortKey("c_begin")
-                            .build(),
-                    new CompletionItem.Builder("end")
-                            .detail("iterator")
-                            .kind(CompletionItem.KIND_FUNCTION)
-                            .insertText("end()")
-                            .sortKey("d_end")
-                            .build(),
-                    new CompletionItem.Builder("size")
-                            .detail("size_t")
-                            .kind(CompletionItem.KIND_FUNCTION)
-                            .insertText("size()")
-                            .sortKey("e_size")
-                            .build()
+                    new CompletionItem() {{ label = "length"; detail = "size_t"; kind = CompletionItem.KIND_PROPERTY; insertText = "length()"; sortKey = "a_length"; }},
+                    new CompletionItem() {{ label = "push_back"; detail = "void push_back(T)"; kind = CompletionItem.KIND_FUNCTION; insertText = "push_back()"; sortKey = "b_push_back"; }},
+                    new CompletionItem() {{ label = "begin"; detail = "iterator"; kind = CompletionItem.KIND_FUNCTION; insertText = "begin()"; sortKey = "c_begin"; }},
+                    new CompletionItem() {{ label = "end"; detail = "iterator"; kind = CompletionItem.KIND_FUNCTION; insertText = "end()"; sortKey = "d_end"; }},
+                    new CompletionItem() {{ label = "size"; detail = "size_t"; kind = CompletionItem.KIND_FUNCTION; insertText = "size()"; sortKey = "e_size"; }}
             );
             receiver.accept(new CompletionResult(items, false));
             Log.d(TAG, "Synchronous push: " + items.size() + " member candidates");
@@ -91,51 +66,13 @@ public class DemoCompletionProvider implements CompletionProvider {
             }
 
             List<CompletionItem> items = Arrays.asList(
-                    new CompletionItem.Builder("std::string")
-                            .detail("class")
-                            .kind(CompletionItem.KIND_CLASS)
-                            .insertText("std::string")
-                            .sortKey("a_string")
-                            .build(),
-                    new CompletionItem.Builder("std::vector")
-                            .detail("template class")
-                            .kind(CompletionItem.KIND_CLASS)
-                            .insertText("std::vector<>")
-                            .sortKey("b_vector")
-                            .build(),
-                    new CompletionItem.Builder("std::cout")
-                            .detail("ostream")
-                            .kind(CompletionItem.KIND_VARIABLE)
-                            .insertText("std::cout")
-                            .sortKey("c_cout")
-                            .build(),
-                    new CompletionItem.Builder("if")
-                            .detail("snippet")
-                            .kind(CompletionItem.KIND_SNIPPET)
-                            .insertText("if (${1:condition}) {\n\t$0\n}")
-                            .insertTextFormat(CompletionItem.INSERT_TEXT_FORMAT_SNIPPET)
-                            .sortKey("d_if")
-                            .build(),
-                    new CompletionItem.Builder("for")
-                            .detail("snippet")
-                            .kind(CompletionItem.KIND_SNIPPET)
-                            .insertText("for (int ${1:i} = 0; ${1:i} < ${2:n}; ++${1:i}) {\n\t$0\n}")
-                            .insertTextFormat(CompletionItem.INSERT_TEXT_FORMAT_SNIPPET)
-                            .sortKey("e_for")
-                            .build(),
-                    new CompletionItem.Builder("class")
-                            .detail("snippet — class definition")
-                            .kind(CompletionItem.KIND_SNIPPET)
-                            .insertText("class ${1:ClassName} {\npublic:\n\t${1:ClassName}() {$2}\n\t~${1:ClassName}() {$3}\n$0\n};")
-                            .insertTextFormat(CompletionItem.INSERT_TEXT_FORMAT_SNIPPET)
-                            .sortKey("f_class")
-                            .build(),
-                    new CompletionItem.Builder("return")
-                            .detail("keyword")
-                            .kind(CompletionItem.KIND_KEYWORD)
-                            .insertText("return ")
-                            .sortKey("g_return")
-                            .build()
+                    new CompletionItem() {{ label = "std::string"; detail = "class"; kind = CompletionItem.KIND_CLASS; insertText = "std::string"; sortKey = "a_string"; }},
+                    new CompletionItem() {{ label = "std::vector"; detail = "template class"; kind = CompletionItem.KIND_CLASS; insertText = "std::vector<>"; sortKey = "b_vector"; }},
+                    new CompletionItem() {{ label = "std::cout"; detail = "ostream"; kind = CompletionItem.KIND_VARIABLE; insertText = "std::cout"; sortKey = "c_cout"; }},
+                    new CompletionItem() {{ label = "if"; detail = "snippet"; kind = CompletionItem.KIND_SNIPPET; insertText = "if (${1:condition}) {\n\t$0\n}"; insertTextFormat = CompletionItem.INSERT_TEXT_FORMAT_SNIPPET; sortKey = "d_if"; }},
+                    new CompletionItem() {{ label = "for"; detail = "snippet"; kind = CompletionItem.KIND_SNIPPET; insertText = "for (int ${1:i} = 0; ${1:i} < ${2:n}; ++${1:i}) {\n\t$0\n}"; insertTextFormat = CompletionItem.INSERT_TEXT_FORMAT_SNIPPET; sortKey = "e_for"; }},
+                    new CompletionItem() {{ label = "class"; detail = "snippet — class definition"; kind = CompletionItem.KIND_SNIPPET; insertText = "class ${1:ClassName} {\npublic:\n\t${1:ClassName}() {$2}\n\t~${1:ClassName}() {$3}\n$0\n};"; insertTextFormat = CompletionItem.INSERT_TEXT_FORMAT_SNIPPET; sortKey = "f_class"; }},
+                    new CompletionItem() {{ label = "return"; detail = "keyword"; kind = CompletionItem.KIND_KEYWORD; insertText = "return "; sortKey = "g_return"; }}
             );
             receiver.accept(new CompletionResult(items, false));
             Log.d(TAG, "Asynchronous push: " + items.size() + " keyword/identifier candidates (200ms delay)");

@@ -90,8 +90,8 @@ public class EditorCore implements AutoCloseable {
         EditorNative.setViewport(nativeHandle, width, height);
     }
 
-    public void resetMeasurer() {
-        EditorNative.resetMeasurer(nativeHandle);
+    public void onFontMetricsChanged() {
+        EditorNative.onFontMetricsChanged(nativeHandle);
     }
 
     public void setFoldArrowMode(int mode) {
@@ -100,6 +100,10 @@ public class EditorCore implements AutoCloseable {
 
     public void setWrapMode(int mode) {
         EditorNative.setWrapMode(nativeHandle, mode);
+    }
+
+    public void setTabSize(int tabSize) {
+        EditorNative.setTabSize(nativeHandle, tabSize);
     }
 
     public void setScale(float scale) {
@@ -155,6 +159,16 @@ public class EditorCore implements AutoCloseable {
     /** Advances edge-scroll by one tick and returns an updated gesture result. */
     public GestureResult tickEdgeScroll() {
         EditorNative.NativeBinaryResult result = EditorNative.tickEdgeScroll(nativeHandle);
+        try {
+            return ProtocolDecoder.decodeGestureResult(result.asByteBuffer());
+        } finally {
+            result.free();
+        }
+    }
+
+    /** Unified animation tick: advances all active animations (edge-scroll, fling). */
+    public GestureResult tickAnimations() {
+        EditorNative.NativeBinaryResult result = EditorNative.tickAnimations(nativeHandle);
         try {
             return ProtocolDecoder.decodeGestureResult(result.asByteBuffer());
         } finally {

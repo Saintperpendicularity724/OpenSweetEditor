@@ -14,6 +14,10 @@ public class ScrollbarModel {
     @SerializedName("alpha")
     public float alpha;
 
+    /** Whether the thumb is currently being dragged. */
+    @SerializedName("thumb_active")
+    public boolean thumbActive;
+
     /** Track rectangle. */
     @SerializedName("track")
     public ScrollbarRect track;

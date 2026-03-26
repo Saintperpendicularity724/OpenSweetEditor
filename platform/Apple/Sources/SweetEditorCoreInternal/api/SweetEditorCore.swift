@@ -1258,9 +1258,9 @@ class SweetEditorCore {
         }
     }
 
-    func resetMeasurer() {
+    func onFontMetricsChanged() {
         performCoreCall {
-            reset_editor_text_measurer(handle)
+            editor_on_font_metrics_changed(handle)
         }
     }
 
@@ -1743,7 +1743,7 @@ class SweetEditorCore {
         guard scale > 0 else { return }
         rebuildFontsForScale(CGFloat(scale))
         performCoreCall {
-            reset_editor_text_measurer(handle)
+            editor_on_font_metrics_changed(handle)
         }
     }
 

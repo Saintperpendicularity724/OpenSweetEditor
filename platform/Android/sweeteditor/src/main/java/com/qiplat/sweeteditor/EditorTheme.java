@@ -58,6 +58,8 @@ public class EditorTheme {
     public int scrollbarTrackColor = 0x48FFFFFF;
     /** Scrollbar thumb color (ARGB). */
     public int scrollbarThumbColor = 0xAA858585;
+    /** Scrollbar thumb active (dragging) color (ARGB). */
+    public int scrollbarThumbActiveColor = 0xFFBBBBBB;
 
     /** IME composition underline color (ARGB). */
     public int compositionUnderlineColor;
@@ -104,6 +106,17 @@ public class EditorTheme {
     /** Inline suggestion action bar dismiss button text color (ARGB). */
     public int inlineSuggestionBarDismissColor;
 
+    /** Completion popup background color (ARGB). */
+    public int completionBgColor;
+    /** Completion popup border color (ARGB). */
+    public int completionBorderColor;
+    /** Completion popup selected row highlight color (ARGB). */
+    public int completionSelectedBgColor;
+    /** Completion popup label text color (ARGB). */
+    public int completionLabelColor;
+    /** Completion popup detail text color (ARGB). */
+    public int completionDetailColor;
+
     /**
      * Theme text style mapping (extensible).
      * <p>Key: styleId, Value: {@link TextStyle}.
@@ -144,6 +157,7 @@ public class EditorTheme {
         t.splitLineColor            = 0x3356617A;
         t.scrollbarTrackColor       = 0x2AFFFFFF;
         t.scrollbarThumbColor       = 0x9A7282A0;
+        t.scrollbarThumbActiveColor = 0xFFAABEDD;
         t.compositionUnderlineColor = 0xFF7AA2F7;
         t.inlayHintBgColor          = 0x223A4A66;
         t.inlayHintTextColor        = 0xC0AFC2E0;
@@ -162,6 +176,11 @@ public class EditorTheme {
         t.inlineSuggestionBarBgColor     = 0xF2303030;
         t.inlineSuggestionBarAcceptColor = 0xFF4FC1FF;
         t.inlineSuggestionBarDismissColor = 0xFFCCCCCC;
+        t.completionBgColor              = 0xF0252830;
+        t.completionBorderColor          = 0x40607090;
+        t.completionSelectedBgColor      = 0x3D5580BB;
+        t.completionLabelColor           = 0xFFD8DEE9;
+        t.completionDetailColor          = 0xFF7A8494;
 
         t.defineTextStyle(STYLE_KEYWORD, new TextStyle(0xFF7AA2F7, TextStyle.BOLD));
         t.defineTextStyle(STYLE_STRING, new TextStyle(0xFF9ECE6A, TextStyle.NORMAL));
@@ -197,6 +216,7 @@ public class EditorTheme {
         t.splitLineColor            = 0x1F29426B;
         t.scrollbarTrackColor       = 0x1F2A3B55;
         t.scrollbarThumbColor       = 0x80446C9C;
+        t.scrollbarThumbActiveColor = 0xEE6A9AD0;
         t.compositionUnderlineColor = 0xFF2563EB;
         t.inlayHintBgColor          = 0x143B82F6;
         t.inlayHintTextColor        = 0xB0344A73;
@@ -215,6 +235,11 @@ public class EditorTheme {
         t.inlineSuggestionBarBgColor     = 0xF2F0F0F0;
         t.inlineSuggestionBarAcceptColor = 0xFF1A73E8;
         t.inlineSuggestionBarDismissColor = 0xFF555555;
+        t.completionBgColor              = 0xF0FAFBFD;
+        t.completionBorderColor          = 0x30A0A8B8;
+        t.completionSelectedBgColor      = 0x3D3B82F6;
+        t.completionLabelColor           = 0xFF1F2937;
+        t.completionDetailColor          = 0xFF8A94A6;
 
         t.defineTextStyle(STYLE_KEYWORD, new TextStyle(0xFF3559D6, TextStyle.BOLD));
         t.defineTextStyle(STYLE_STRING, new TextStyle(0xFF0F7B6C, TextStyle.NORMAL));

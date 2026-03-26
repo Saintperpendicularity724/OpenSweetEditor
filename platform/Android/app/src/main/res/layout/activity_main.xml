@@ -2,99 +2,75 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical">
+    android:orientation="vertical"
+    android:fitsSystemWindows="false">
 
-    <!-- Top toolbar -->
-    <HorizontalScrollView
+    <!-- Toolbar -->
+    <LinearLayout
+        android:id="@+id/toolbar_container"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="#FF2D2D2D"
-        android:scrollbars="none">
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="8dp"
+        android:paddingEnd="4dp"
+        android:paddingBottom="6dp">
 
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:padding="4dp">
+        <Spinner
+            android:id="@+id/spn_files"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:layout_marginEnd="4dp"
+            android:minWidth="0dp"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp" />
 
-            <Spinner
-                android:id="@+id/spn_files"
-                android:layout_width="132dp"
-                android:layout_height="36dp"
-                android:layout_margin="2dp"
-                android:minWidth="0dp"
-                android:backgroundTint="#FF3C3C3C"
-                android:popupBackground="#FF3C3C3C"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp" />
+        <ImageButton
+            android:id="@+id/btn_undo"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginStart="2dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_undo_24"
+            android:contentDescription="Undo"
+            android:scaleType="centerInside"
+            android:padding="8dp" />
 
-            <Button
-                android:id="@+id/btn_undo"
-                android:layout_width="wrap_content"
-                android:layout_height="36dp"
-                android:layout_margin="2dp"
-                android:backgroundTint="#FF3C3C3C"
-                android:text="Undo"
-                android:textColor="#FFCCCCCC"
-                android:textSize="12sp"
-                android:minWidth="0dp"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp" />
+        <ImageButton
+            android:id="@+id/btn_redo"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginStart="2dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_redo_24"
+            android:contentDescription="Redo"
+            android:scaleType="centerInside"
+            android:padding="8dp" />
 
-            <Button
-                android:id="@+id/btn_redo"
-                android:layout_width="wrap_content"
-                android:layout_height="36dp"
-                android:layout_margin="2dp"
-                android:backgroundTint="#FF3C3C3C"
-                android:text="Redo"
-                android:textColor="#FFCCCCCC"
-                android:textSize="12sp"
-                android:minWidth="0dp"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp" />
+        <ImageButton
+            android:id="@+id/btn_switch_theme"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginStart="2dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_brightness_24"
+            android:contentDescription="Switch Theme"
+            android:scaleType="centerInside"
+            android:padding="8dp" />
 
-            <Button
-                android:id="@+id/btn_switch_theme"
-                android:layout_width="wrap_content"
-                android:layout_height="36dp"
-                android:layout_margin="2dp"
-                android:backgroundTint="#FF4E4E1A"
-                android:text="Theme"
-                android:textColor="#FFFFD700"
-                android:textSize="12sp"
-                android:minWidth="0dp"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp" />
+        <ImageButton
+            android:id="@+id/btn_wrap_mode"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginStart="2dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_wrap_text_24"
+            android:contentDescription="Wrap Mode"
+            android:scaleType="centerInside"
+            android:padding="8dp" />
 
-            <Button
-                android:id="@+id/btn_wrap_mode"
-                android:layout_width="wrap_content"
-                android:layout_height="36dp"
-                android:layout_margin="2dp"
-                android:backgroundTint="#FF3A3A4E"
-                android:text="WrapMode"
-                android:textColor="#FFAAB8FA"
-                android:textSize="12sp"
-                android:minWidth="0dp"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp" />
-
-        </LinearLayout>
-    </HorizontalScrollView>
-
-    <!-- Status bar -->
-    <TextView
-        android:id="@+id/tv_status"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="#FF252526"
-        android:padding="4dp"
-        android:text="Ready"
-        android:textColor="#FF858585"
-        android:textSize="11sp"
-        android:singleLine="true"
-        android:ellipsize="end" />
+    </LinearLayout>
 
     <!-- Editor -->
     <com.qiplat.sweeteditor.SweetEditor
@@ -102,5 +78,16 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1" />
+
+    <!-- Status bar -->
+    <TextView
+        android:id="@+id/tv_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="5dp"
+        android:text="Ready"
+        android:textSize="11sp"
+        android:singleLine="true"
+        android:ellipsize="end" />
 
 </LinearLayout>

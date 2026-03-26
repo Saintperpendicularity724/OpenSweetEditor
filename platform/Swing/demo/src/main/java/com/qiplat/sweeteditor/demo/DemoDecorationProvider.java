@@ -45,18 +45,7 @@ import java.util.concurrent.Executors;
 
 public class DemoDecorationProvider implements DecorationProvider {
     private static final String DEFAULT_ANALYSIS_FILE_NAME = "example.cpp";
-    private static final int STYLE_KEYWORD = EditorTheme.STYLE_KEYWORD;
-    private static final int STYLE_STRING = EditorTheme.STYLE_STRING;
-    private static final int STYLE_COMMENT = EditorTheme.STYLE_COMMENT;
-    private static final int STYLE_NUMBER = EditorTheme.STYLE_NUMBER;
-    private static final int STYLE_TYPE = EditorTheme.STYLE_TYPE;
-    private static final int STYLE_FUNCTION = EditorTheme.STYLE_FUNCTION;
-    private static final int STYLE_PREPROCESSOR = EditorTheme.STYLE_PREPROCESSOR;
-    private static final int STYLE_CLASS = EditorTheme.STYLE_CLASS;
-    private static final int STYLE_BUILTIN = EditorTheme.STYLE_BUILTIN;
-    private static final int STYLE_VARIABLE = EditorTheme.STYLE_VARIABLE;
-    private static final int STYLE_ANNOTATION = EditorTheme.STYLE_ANNOTATION;
-    private static final int STYLE_COLOR = EditorTheme.STYLE_PREPROCESSOR + 1;
+    private static final int STYLE_COLOR = EditorTheme.STYLE_USER_BASE + 1;
     private static final int MAX_DYNAMIC_DIAGNOSTICS = 8;
     private static final String PHANTOM_MEMBER_STUB =
             "\n    void debugTrace(const std::string& tag) {\n        log(DEBUG, tag);\n    }";
@@ -272,7 +261,7 @@ public class DemoDecorationProvider implements DecorationProvider {
             return firstKeywordRange;
         }
 
-        if (token.styleId() == STYLE_KEYWORD) {
+        if (token.styleId() == EditorTheme.STYLE_KEYWORD) {
             if (firstKeywordRange == null) {
                 firstKeywordRange = range;
             }
@@ -288,7 +277,7 @@ public class DemoDecorationProvider implements DecorationProvider {
             return firstKeywordRange;
         }
 
-        if (token.styleId() == STYLE_COMMENT) {
+        if (token.styleId() == EditorTheme.STYLE_COMMENT) {
             String upper = literal.toUpperCase(Locale.ROOT);
             int fixmeIndex = upper.indexOf("FIXME");
             if (fixmeIndex >= 0) {
@@ -304,15 +293,10 @@ public class DemoDecorationProvider implements DecorationProvider {
         }
 
         if (token.styleId() == STYLE_COLOR) {
-            Integer color = parseColorLiteral(literal);
-            if (color != null) {
-                appendDiagnostic(diagnostics, seenDiagnostics, diagnosticCount,
-                        range.line, range.startColumn, range.length(), 2, color);
-            }
             return firstKeywordRange;
         }
 
-        if (token.styleId() == STYLE_ANNOTATION) {
+        if (token.styleId() == EditorTheme.STYLE_ANNOTATION) {
             appendDiagnostic(diagnostics, seenDiagnostics, diagnosticCount,
                     range.line, range.startColumn, range.length(), 3, 0);
         }
@@ -392,7 +376,7 @@ public class DemoDecorationProvider implements DecorationProvider {
     private void appendTextInlayHint(Map<Integer, List<InlayHint>> inlayHints,
                                      List<String> textLines,
                                      TokenSpan token) {
-        if (token.styleId() != STYLE_KEYWORD) {
+        if (token.styleId() != EditorTheme.STYLE_KEYWORD) {
             return;
         }
         TokenRangeInfo range = extractSingleLineTokenRange(token);
@@ -411,7 +395,7 @@ public class DemoDecorationProvider implements DecorationProvider {
     }
 
     private void appendSeparator(List<SeparatorGuide> separatorGuides, List<String> textLines, TokenSpan token) {
-        if (token.styleId() != STYLE_COMMENT) {
+        if (token.styleId() != EditorTheme.STYLE_COMMENT) {
             return;
         }
         TokenRangeInfo range = extractSingleLineTokenRange(token);
@@ -451,7 +435,7 @@ public class DemoDecorationProvider implements DecorationProvider {
     }
 
     private void appendGutterIcons(Map<Integer, List<GutterIcon>> gutterIcons, List<String> textLines, TokenSpan token) {
-        if (token.styleId() != STYLE_KEYWORD) {
+        if (token.styleId() != EditorTheme.STYLE_KEYWORD) {
             return;
         }
         TokenRangeInfo range = extractSingleLineTokenRange(token);
@@ -466,9 +450,12 @@ public class DemoDecorationProvider implements DecorationProvider {
     }
 
     private static Integer parseColorLiteral(String literal) {
-        if (literal.startsWith("0X")) {
+        if (literal.length() > 2
+                && literal.charAt(0) == '0'
+                && (literal.charAt(1) == 'X' || literal.charAt(1) == 'x')) {
             try {
-                return (int) Long.parseLong(literal.substring(2), 16);
+                String hex = literal.substring(2).replaceAll("[_uUlL]", "");
+                return (int) Long.parseLong(hex, 16);
             } catch (NumberFormatException ignored) {
                 return null;
             }
@@ -599,21 +586,21 @@ public class DemoDecorationProvider implements DecorationProvider {
     }
 
     private static void registerDemoStyleMap(HighlightEngine engine) {
-        engine.registerStyleName("keyword", STYLE_KEYWORD);
-        engine.registerStyleName("type", STYLE_TYPE);
-        engine.registerStyleName("string", STYLE_STRING);
-        engine.registerStyleName("comment", STYLE_COMMENT);
-        engine.registerStyleName("preprocessor", STYLE_PREPROCESSOR);
-        engine.registerStyleName("macro", STYLE_PREPROCESSOR);
-        engine.registerStyleName("method", STYLE_FUNCTION);
-        engine.registerStyleName("function", STYLE_FUNCTION);
-        engine.registerStyleName("variable", STYLE_VARIABLE);
-        engine.registerStyleName("field", STYLE_VARIABLE);
-        engine.registerStyleName("number", STYLE_NUMBER);
-        engine.registerStyleName("class", STYLE_CLASS);
+        engine.registerStyleName("keyword", EditorTheme.STYLE_KEYWORD);
+        engine.registerStyleName("type", EditorTheme.STYLE_TYPE);
+        engine.registerStyleName("string", EditorTheme.STYLE_STRING);
+        engine.registerStyleName("comment", EditorTheme.STYLE_COMMENT);
+        engine.registerStyleName("preprocessor", EditorTheme.STYLE_PREPROCESSOR);
+        engine.registerStyleName("macro", EditorTheme.STYLE_PREPROCESSOR);
+        engine.registerStyleName("method", EditorTheme.STYLE_FUNCTION);
+        engine.registerStyleName("function", EditorTheme.STYLE_FUNCTION);
+        engine.registerStyleName("variable", EditorTheme.STYLE_VARIABLE);
+        engine.registerStyleName("field", EditorTheme.STYLE_VARIABLE);
+        engine.registerStyleName("number", EditorTheme.STYLE_NUMBER);
+        engine.registerStyleName("class", EditorTheme.STYLE_CLASS);
+        engine.registerStyleName("builtin", EditorTheme.STYLE_BUILTIN);
+        engine.registerStyleName("annotation", EditorTheme.STYLE_ANNOTATION);
         engine.registerStyleName("color", STYLE_COLOR);
-        engine.registerStyleName("builtin", STYLE_BUILTIN);
-        engine.registerStyleName("annotation", STYLE_ANNOTATION);
     }
 
     private static String resolveCurrentFileName(DecorationContext context) {
