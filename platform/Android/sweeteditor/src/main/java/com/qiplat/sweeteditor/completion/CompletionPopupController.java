@@ -2,10 +2,13 @@ package com.qiplat.sweeteditor.completion;
 
 import android.content.Context;
 import android.graphics.Color;
+import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.text.TextUtils;
+import android.os.Build;
+import android.view.WindowInsets;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -161,37 +164,122 @@ public class CompletionPopupController implements CompletionProviderManager.Comp
     private void applyPosition() {
         int gap = dpToPx(context, GAP_DP);
         int popupHeight = popupWindow.getHeight();
-        if (popupHeight <= 0) popupHeight = dpToPx(context, ITEM_HEIGHT_DP * Math.min(items.size(), MAX_VISIBLE_ITEMS));
-        int popupWidth = dpToPx(context, POPUP_WIDTH_DP);
+        if (popupHeight <= 0) {
+            popupHeight = dpToPx(context, ITEM_HEIGHT_DP * Math.min(items.size(), MAX_VISIBLE_ITEMS));
+        }
 
-        // Convert View-relative coordinates to screen coordinates
         int[] anchorLocation = new int[2];
         anchorView.getLocationOnScreen(anchorLocation);
 
-        int screenX = anchorLocation[0] + (int) cachedCursorX;
-        // Default: display below cursor (cursor bottom + gap)
-        int screenY = anchorLocation[1] + (int) (cachedCursorY + cachedCursorHeight + gap);
+        int cursorLeft = anchorLocation[0] + (int) cachedCursorX;
+        int cursorTop = anchorLocation[1] + (int) cachedCursorY;
+        int cursorBottom = anchorLocation[1] + (int) (cachedCursorY + cachedCursorHeight);
 
-        // Get screen height for boundary detection
-        int screenHeight = anchorView.getResources().getDisplayMetrics().heightPixels;
-        int screenWidth = anchorView.getResources().getDisplayMetrics().widthPixels;
-
-        // Flip to above cursor if not enough space below
-        if (screenY + popupHeight > screenHeight) {
-            screenY = anchorLocation[1] + (int) cachedCursorY - popupHeight - gap;
+        Rect visibleFrame = new Rect();
+        anchorView.getWindowVisibleDisplayFrame(visibleFrame);
+        if (visibleFrame.width() <= 0 || visibleFrame.height() <= 0) {
+            int screenHeight = anchorView.getResources().getDisplayMetrics().heightPixels;
+            int screenWidth = anchorView.getResources().getDisplayMetrics().widthPixels;
+            visibleFrame.set(0, 0, screenWidth, screenHeight);
         }
 
-        // Right edge overflow
-        if (screenX + popupWidth > screenWidth) {
-            screenX = screenWidth - popupWidth;
+        int imeBottom = 0;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            WindowInsets rootInsets = anchorView.getRootWindowInsets();
+            if (rootInsets != null) {
+                imeBottom = rootInsets.getInsets(WindowInsets.Type.ime()).bottom;
+            }
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            WindowInsets rootInsets = anchorView.getRootWindowInsets();
+            if (rootInsets != null) {
+                int systemBottom = rootInsets.getSystemWindowInsetBottom();
+                int stableBottom = rootInsets.getStableInsetBottom();
+                imeBottom = Math.max(0, systemBottom - stableBottom);
+            }
         }
-        if (screenX < 0) screenX = 0;
-        // Fallback if top also overflows
-        if (screenY < 0) screenY = 0;
+
+        if (imeBottom > 0) {
+            View rootView = anchorView.getRootView();
+            int rootHeight = rootView != null ? rootView.getHeight() : 0;
+            if (rootView != null && rootHeight > 0) {
+                int[] rootLocation = new int[2];
+                rootView.getLocationOnScreen(rootLocation);
+                int imeTop = rootLocation[1] + rootHeight - imeBottom;
+                if (imeTop > visibleFrame.top && imeTop < visibleFrame.bottom) {
+                    visibleFrame.bottom = imeTop;
+                }
+            } else if (imeBottom < visibleFrame.height()) {
+                visibleFrame.bottom = visibleFrame.bottom - imeBottom;
+            }
+        }
+
+        if (imeBottom <= 0) {
+            // Fallback for edge-to-edge windows where IME insets may temporarily report 0.
+            View rootView = anchorView.getRootView();
+            if (rootView != null) {
+                Rect rootVisible = new Rect();
+                rootView.getWindowVisibleDisplayFrame(rootVisible);
+                int keyboardHeight = rootView.getHeight() - rootVisible.height();
+                int keyboardThreshold = dpToPx(context, 80);
+                if (keyboardHeight > keyboardThreshold) {
+                    int[] rootLocation = new int[2];
+                    rootView.getLocationOnScreen(rootLocation);
+                    int imeTop = rootLocation[1] + rootVisible.bottom;
+                    if (imeTop > visibleFrame.top && imeTop < visibleFrame.bottom) {
+                        visibleFrame.bottom = imeTop;
+                    }
+                }
+            }
+        }
+
+        if (visibleFrame.height() < dpToPx(context, ITEM_HEIGHT_DP)) {
+            return;
+        }
+
+        int desiredPopupWidth = dpToPx(context, POPUP_WIDTH_DP);
+        int minPopupWidth = dpToPx(context, 120);
+        int availableWidth = Math.max(1, visibleFrame.width() - dpToPx(context, 8));
+        int popupWidth = Math.min(desiredPopupWidth, Math.max(minPopupWidth, availableWidth));
+        if (popupWidth > visibleFrame.width()) {
+            popupWidth = visibleFrame.width();
+        }
+
+        int maxPopupHeight = Math.max(dpToPx(context, ITEM_HEIGHT_DP), visibleFrame.height() - dpToPx(context, 8));
+        if (popupHeight > maxPopupHeight) {
+            popupHeight = maxPopupHeight;
+        }
+
+        int maxX = visibleFrame.right - popupWidth;
+        int screenX = Math.max(visibleFrame.left, Math.min(cursorLeft, maxX));
+
+        int belowY = cursorBottom + gap;
+        int aboveY = cursorTop - popupHeight - gap;
+
+        boolean canShowBelow = belowY + popupHeight <= visibleFrame.bottom;
+        boolean canShowAbove = aboveY >= visibleFrame.top;
+
+        int screenY;
+        if (canShowBelow) {
+            screenY = belowY;
+        } else if (canShowAbove) {
+            screenY = aboveY;
+        } else {
+            int clampedBelow = Math.max(visibleFrame.top,
+                    Math.min(belowY, visibleFrame.bottom - popupHeight));
+            int clampedAbove = Math.max(visibleFrame.top,
+                    Math.min(aboveY, visibleFrame.bottom - popupHeight));
+            int spaceBelow = visibleFrame.bottom - cursorBottom - gap;
+            int spaceAbove = cursorTop - gap - visibleFrame.top;
+            screenY = spaceAbove > spaceBelow ? clampedAbove : clampedBelow;
+        }
+
+        screenY = Math.max(visibleFrame.top, screenY);
+        if (screenY + popupHeight > visibleFrame.bottom) {
+            screenY = Math.max(visibleFrame.top, visibleFrame.bottom - popupHeight);
+        }
 
         popupWindow.update(screenX, screenY, popupWidth, popupHeight);
     }
-
     public void dismiss() {
         if (popupWindow != null && popupWindow.isShowing()) {
             popupWindow.dismiss();
