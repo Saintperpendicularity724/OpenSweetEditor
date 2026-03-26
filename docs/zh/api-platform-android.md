@@ -14,6 +14,92 @@
 - `buildRenderModel()`、手势结果、键盘结果、文本编辑结果、滚动度量当前仍通过二进制协议返回，再由 `ProtocolDecoder` 解码。
 - `SweetEditor` 对外提供语义化枚举 API（`WrapMode`/`FoldArrowMode`/`AutoIndentMode` 等）。
 
+## 快速开始
+
+### 环境要求（按当前仓库配置）
+
+- Android Gradle Plugin：`8.1.3`
+- Gradle Wrapper：`8.5`
+- `compileSdk 34` / `minSdk 21`
+- NDK：`28.2.13676358`
+
+### 在仓库内直接运行 Demo
+
+```bash
+cd platform/Android
+./gradlew :app:assembleDebug
+```
+
+Windows PowerShell 可用：
+
+```powershell
+cd platform/Android
+.\gradlew.bat :app:assembleDebug
+```
+
+### 在现有 Android 项目中接入
+
+推荐直接使用 Maven Central 依赖：
+
+```gradle
+repositories {
+    mavenCentral()
+    google()
+}
+
+dependencies {
+    implementation("com.qiplat:sweeteditor:0.0.2")
+}
+```
+> 依赖版本以最新版为准，当前为0.0.2
+  
+如果使用仓库源码模块（本地联调场景）：
+
+1. 在 `settings.gradle` 包含模块：
+
+```gradle
+include(":sweeteditor")
+```
+
+2. 在应用模块添加本地模块依赖：
+
+```gradle
+dependencies {
+    implementation(project(":sweeteditor"))
+}
+```
+
+- 如果你复制了 `sweeteditor` 到不同目录层级，记得同步调整
+   `platform/Android/sweeteditor/build.gradle` 里的 `externalNativeBuild.cmake.path`（当前指向 `../../../CMakeLists.txt`）。
+
+### 最小集成示例
+
+布局（XML）：
+
+```xml
+<com.qiplat.sweeteditor.SweetEditor
+    android:id="@+id/editor"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent" />
+```
+
+初始化（Java）：
+
+```java
+import com.qiplat.sweeteditor.EditorTheme;
+import com.qiplat.sweeteditor.SweetEditor;
+import com.qiplat.sweeteditor.core.Document;
+
+SweetEditor editor = findViewById(R.id.editor);
+editor.applyTheme(EditorTheme.dark());
+editor.loadDocument(new Document("Hello, SweetEditor!"));
+```
+
+### 说明
+
+- 不需要手动 `System.loadLibrary("sweeteditor")`，`EditorCore` 静态块已处理。
+- 当前默认 ABI 过滤为 `arm64-v8a`、`x86_64`；如需其他 ABI，请在 `sweeteditor/build.gradle` 的 `ndk.abiFilters` 中调整。
+
 ## 公开控件层：`SweetEditor`
 
 ### 构造

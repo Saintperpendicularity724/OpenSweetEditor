@@ -14,6 +14,93 @@ This document maps to the current Android implementation:
 - `buildRenderModel()`, gesture result, key result, text edit result, and scroll metrics still return by binary protocol, then `ProtocolDecoder` decodes them.
 - `SweetEditor` exposes semantic enum APIs (`WrapMode`/`FoldArrowMode`/`AutoIndentMode`, etc.).
 
+## Quick Start
+
+### Environment Requirements (current repo configuration)
+
+- Android Gradle Plugin: `8.1.3`
+- Gradle Wrapper: `8.5`
+- `compileSdk 34` / `minSdk 21`
+- NDK: `28.2.13676358`
+
+### Run the Demo in this repository
+
+```bash
+cd platform/Android
+./gradlew :app:assembleDebug
+```
+
+On Windows PowerShell:
+
+```powershell
+cd platform/Android
+.\gradlew.bat :app:assembleDebug
+```
+
+### Integrate into an existing Android app
+
+Recommended: use the Maven Central artifact directly:
+
+```gradle
+repositories {
+    mavenCentral()
+    google()
+}
+
+dependencies {
+    implementation("com.qiplat:sweeteditor:0.0.2")
+}
+```
+> The dependency version should follow the latest release, which is currently 0.0.2.
+  
+If you need local source-module integration (for local debugging):
+
+1. Include the module in `settings.gradle`:
+
+```gradle
+include(":sweeteditor")
+```
+
+2. Add the local module dependency in your app module:
+
+```gradle
+dependencies {
+    implementation(project(":sweeteditor"))
+}
+```
+
+- If you copy `sweeteditor` to a different directory depth, update
+   `externalNativeBuild.cmake.path` in `platform/Android/sweeteditor/build.gradle`
+   (current value: `../../../CMakeLists.txt`).
+
+### Minimal Integration Example
+
+Layout (XML):
+
+```xml
+<com.qiplat.sweeteditor.SweetEditor
+    android:id="@+id/editor"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent" />
+```
+
+Initialization (Java):
+
+```java
+import com.qiplat.sweeteditor.EditorTheme;
+import com.qiplat.sweeteditor.SweetEditor;
+import com.qiplat.sweeteditor.core.Document;
+
+SweetEditor editor = findViewById(R.id.editor);
+editor.applyTheme(EditorTheme.dark());
+editor.loadDocument(new Document("Hello, SweetEditor!"));
+```
+
+### Notes
+
+- No manual `System.loadLibrary("sweeteditor")` call is needed; `EditorCore` handles it in a static block.
+- Default ABI filters are `arm64-v8a` and `x86_64`; add more ABIs in `ndk.abiFilters` inside `sweeteditor/build.gradle` if needed.
+
 ## Public Control Layer: `SweetEditor`
 
 ### Constructors

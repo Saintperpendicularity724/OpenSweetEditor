@@ -14,6 +14,98 @@
 - 当前桥接协议为二进制 payload。
 - `SweetEditor` 提供语义化控件 API（枚举）并处理 Swing 输入事件。
 
+## 快速开始
+
+### 环境要求（按当前仓库配置）
+
+- JDK：`22`
+- Gradle Wrapper：`8.10`
+- 运行参数：`--enable-native-access=ALL-UNNAMED`
+- 当前 demo 配置默认开启 `--enable-preview`
+
+### 在仓库内直接运行 Demo
+
+```bash
+cd platform/Swing
+./gradlew :demo:run
+```
+
+Windows PowerShell 可用：
+
+```powershell
+cd platform/Swing
+.\gradlew.bat :demo:run
+```
+
+### 在现有 Java Swing 项目中接入
+
+推荐使用 Maven Central 依赖：
+
+```gradle
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation("com.qiplat.sweeteditor-swing:0.0.2")
+}
+```
+
+Maven（pom.xml）可使用：
+
+```xml
+<dependency>
+    <groupId>com.qiplat</groupId>
+    <artifactId>sweeteditor-swing</artifactId>
+    <version>0.0.2</version>
+    <scope>compile</scope>
+</dependency>
+```
+> 依赖版本以最新版为准，当前为0.0.2
+
+运行 JVM 需开启：
+
+```text
+--enable-native-access=ALL-UNNAMED
+```
+
+如果使用仓库源码模块（本地联调场景）：
+
+```gradle
+dependencies {
+    implementation(project(":sweeteditor"))
+}
+```
+
+### 最小集成示例
+
+```java
+import com.qiplat.sweeteditor.EditorTheme;
+import com.qiplat.sweeteditor.SweetEditor;
+import com.qiplat.sweeteditor.core.Document;
+
+import javax.swing.JFrame;
+import javax.swing.SwingUtilities;
+
+SwingUtilities.invokeLater(() -> {
+    JFrame frame = new JFrame("SweetEditor");
+    frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+
+    SweetEditor editor = new SweetEditor(EditorTheme.dark());
+    editor.loadDocument(new Document("Hello, SweetEditor!"));
+
+    frame.setContentPane(editor);
+    frame.setSize(1000, 700);
+    frame.setLocationRelativeTo(null);
+    frame.setVisible(true);
+});
+```
+
+### 说明
+
+- `EditorNative` 会按顺序尝试加载本地库：`-Dsweeteditor.lib.path` -> 源码候选目录 -> JAR 内 native 自动解压 -> `java.library.path`。
+- Maven 发布场景可选调用 `NativeLibraryExtractor.extractToDefaultDir()` 预先解压本地库。
+
 ## 公开控件层：`SweetEditor`
 
 ### 构造与基础

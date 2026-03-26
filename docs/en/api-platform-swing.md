@@ -14,6 +14,98 @@ This document maps to the current Swing implementation:
 - The current bridge protocol is binary payload.
 - `SweetEditor` provides semantic control APIs (enums) and handles Swing input events.
 
+## Quick Start
+
+### Environment Requirements (current repo configuration)
+
+- JDK: `22`
+- Gradle Wrapper: `8.10`
+- Runtime JVM flag: `--enable-native-access=ALL-UNNAMED`
+- The current demo setup enables `--enable-preview` for both compile and run
+
+### Run the Demo in this repository
+
+```bash
+cd platform/Swing
+./gradlew :demo:run
+```
+
+On Windows PowerShell:
+
+```powershell
+cd platform/Swing
+.\gradlew.bat :demo:run
+```
+
+### Integrate into an existing Java Swing project
+
+Recommended: use the Maven Central artifact:
+
+```gradle
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation("com.qiplat.sweeteditor-swing:0.0.2")
+}
+```
+
+For Maven (`pom.xml`):
+
+```xml
+<dependency>
+    <groupId>com.qiplat</groupId>
+    <artifactId>sweeteditor-swing</artifactId>
+    <version>0.0.2</version>
+    <scope>compile</scope>
+</dependency>
+```
+> The dependency version should follow the latest release, which is currently 0.0.2.
+
+Required JVM flag:
+
+```text
+--enable-native-access=ALL-UNNAMED
+```
+
+If you use local source-module integration (for local debugging):
+
+```gradle
+dependencies {
+    implementation(project(":sweeteditor"))
+}
+```
+
+### Minimal Integration Example
+
+```java
+import com.qiplat.sweeteditor.EditorTheme;
+import com.qiplat.sweeteditor.SweetEditor;
+import com.qiplat.sweeteditor.core.Document;
+
+import javax.swing.JFrame;
+import javax.swing.SwingUtilities;
+
+SwingUtilities.invokeLater(() -> {
+    JFrame frame = new JFrame("SweetEditor");
+    frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+
+    SweetEditor editor = new SweetEditor(EditorTheme.dark());
+    editor.loadDocument(new Document("Hello, SweetEditor!"));
+
+    frame.setContentPane(editor);
+    frame.setSize(1000, 700);
+    frame.setLocationRelativeTo(null);
+    frame.setVisible(true);
+});
+```
+
+### Notes
+
+- `EditorNative` loads native library in order: `-Dsweeteditor.lib.path` -> source candidate directories -> native auto-extract from JAR -> `java.library.path`.
+- In Maven-release scenarios, you can optionally call `NativeLibraryExtractor.extractToDefaultDir()` before first editor use.
+
 ## Public Control Layer: `SweetEditor`
 
 ### Constructor and Basics
