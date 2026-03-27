@@ -22,6 +22,7 @@ CMakeSettings.json
 **/.claude
 **/.codex
 **/.codex-home
+**/.codex-cache
 
 # Trae
 .trae/
