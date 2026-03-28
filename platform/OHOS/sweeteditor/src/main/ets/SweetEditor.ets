@@ -7,6 +7,9 @@ import {
   GestureResult,
   GestureType,
   HitTargetType,
+  ScrollbarConfig,
+  ScrollbarMode,
+  ScrollbarTrackTapMode,
   KeyEventResult,
   Modifier,
   TextChange,
@@ -502,8 +505,20 @@ export struct SweetEditor {
     const ctx = this.canvasContext!;
     this.renderer.attachCanvasContext(ctx);
 
+    const scrollbarConfig = new ScrollbarConfig();
+    scrollbarConfig.thickness = 8.0;
+    scrollbarConfig.minThumb = 40.0;
+    scrollbarConfig.thumbHitPadding = 20.0;
+    scrollbarConfig.mode = ScrollbarMode.TRANSIENT;
+    scrollbarConfig.thumbDraggable = true;
+    scrollbarConfig.trackTapMode = ScrollbarTrackTapMode.DISABLED;
+    scrollbarConfig.fadeDelayMs = 700;
+    scrollbarConfig.fadeDurationMs = 300;
+    this.renderer.setScrollbarConfig(scrollbarConfig);
+
     this.editorCore = new EditorCore(this.renderer.getMeasurer(), options);
     this.editorCore.setHandleConfig(this.renderer.getHandleConfig());
+    this.editorCore.setScrollbarConfig(scrollbarConfig);
     this.registerImeCallbacks();
 
     this.settings = new EditorSettings(this);
@@ -1931,6 +1946,11 @@ export struct SweetEditor {
   }
 
   private scheduleTransientScrollbarRefresh(delayMs: number): void {
+    const config = this.renderer ? this.renderer.getScrollbarConfig() : null;
+    if (config === null || config.mode !== ScrollbarMode.TRANSIENT) {
+      this.clearTransientScrollbarTimer();
+      return;
+    }
     this.clearTransientScrollbarTimer();
     this.transientScrollbarTimerId = setTimeout(() => {
       this.flush();

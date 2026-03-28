@@ -1,5 +1,10 @@
 import { EditorIconProvider, EditorTheme } from './EditorTypes';
-import { HandleConfig } from './core/EditorCore';
+import {
+  HandleConfig,
+  ScrollbarConfig,
+  ScrollbarMode,
+  ScrollbarTrackTapMode
+} from './core/EditorCore';
 import {
   BracketHighlightRect,
   CompositionDecoration,
@@ -43,6 +48,7 @@ export class EditorRenderer {
   private theme: EditorTheme;
   private density: number;
   private readonly handleConfig: HandleConfig;
+  private scrollbarConfig: ScrollbarConfig | null = null;
   private textSize: number = DEFAULT_TEXT_SIZE;
   private scale: number = 1.0;
   private fontFamily: string = 'monospace';
@@ -129,6 +135,14 @@ export class EditorRenderer {
 
   getHandleConfig(): HandleConfig {
     return this.handleConfig;
+  }
+
+  setScrollbarConfig(config: ScrollbarConfig | null): void {
+    this.scrollbarConfig = config;
+  }
+
+  getScrollbarConfig(): ScrollbarConfig | null {
+    return this.scrollbarConfig;
   }
 
   attachCanvasContext(ctx: CanvasRenderingContext2D): void {
@@ -781,7 +795,7 @@ export class EditorRenderer {
       ctx.fillRect(verticalTrackX, horizontalTrackY, verticalTrackWidth, horizontalTrackHeight);
     }
 
-    return true;
+    return this.scrollbarConfig !== null && this.scrollbarConfig.mode === ScrollbarMode.TRANSIENT;
   }
 
   private getActiveLogicalLine(model: EditorRenderModel): number {

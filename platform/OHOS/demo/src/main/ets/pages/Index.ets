@@ -96,7 +96,6 @@ struct Index {
         this.buildHeader()
       }
       .width('100%')
-      .padding({ left: 12, right: 12 })
 
       Column() {
         SweetEditor({ controller: this.editorController })
@@ -105,10 +104,8 @@ struct Index {
       }
       .layoutWeight(1)
       .width('100%')
-      .margin({ top: 12 })
       .padding(1)
       .backgroundColor(this.panelColor())
-      .border({ width: 1, color: this.chromeStrokeColor() })
     }
     .height('100%')
     .width('100%')
@@ -233,8 +230,6 @@ struct Index {
     .width('100%')
     .padding({ left: 14, right: 14, top: 14, bottom: 12 })
     .backgroundColor(this.panelColor())
-    .borderRadius(22)
-    .border({ width: 1, color: this.chromeStrokeColor() })
   }
 
   @Builder
