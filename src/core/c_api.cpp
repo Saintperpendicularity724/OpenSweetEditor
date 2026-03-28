@@ -1227,6 +1227,14 @@ void editor_goto_position(intptr_t editor_handle, size_t line, size_t column) {
   editor_core->gotoPosition(line, column);
 }
 
+void editor_ensure_cursor_visible(intptr_t editor_handle) {
+  Ptr<EditorCore> editor_core = getCPtrHolderValue<EditorCore>(editor_handle);
+  if (editor_core == nullptr) {
+    return;
+  }
+  editor_core->ensureCursorVisible();
+}
+
 void editor_set_scroll(intptr_t editor_handle, float scroll_x, float scroll_y) {
   Ptr<EditorCore> editor_core = getCPtrHolderValue<EditorCore>(editor_handle);
   if (editor_core == nullptr) {

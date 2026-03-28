@@ -1533,6 +1533,9 @@ namespace SweetEditor {
 		[DllImport(LibraryName, EntryPoint = "editor_goto_position", CallingConvention = CallingConvention.Cdecl)]
 		internal static extern void GotoPosition(IntPtr handle, int line, int column);
 
+		[DllImport(LibraryName, EntryPoint = "editor_ensure_cursor_visible", CallingConvention = CallingConvention.Cdecl)]
+		internal static extern void EnsureCursorVisible(IntPtr handle);
+
 		[DllImport(LibraryName, EntryPoint = "editor_set_scroll", CallingConvention = CallingConvention.Cdecl)]
 		internal static extern void SetScroll(IntPtr handle, float scrollX, float scrollY);
 
@@ -2270,6 +2273,11 @@ namespace SweetEditor {
 		/// <param name="column">Target column (0-based).</param>
 		public void GotoPosition(int line, int column) {
 			NativeMethods.GotoPosition(nativeHandle, line, column);
+		}
+
+		/// <summary>Scrolls minimally to keep the current caret visible inside the viewport.</summary>
+		public void EnsureCursorVisible() {
+			NativeMethods.EnsureCursorVisible(nativeHandle);
 		}
 
 		/// <summary>Scrolls to the specified line.</summary>

@@ -506,6 +506,9 @@ namespace NS_SWEETEDITOR {
     /// @param column Column number (0-based)
     void gotoPosition(size_t line, size_t column);
 
+    /// Adjust scroll offset just enough to keep current cursor inside viewport
+    void ensureCursorVisible();
+
     /// Manually set editor scroll offset
     /// @param scroll_x Horizontal scroll offset
     /// @param scroll_y Vertical scroll offset
@@ -755,8 +758,6 @@ namespace NS_SWEETEDITOR {
     /// Drag selection to screen coordinates
     /// @param is_mouse true for mouse drag (no y-offset), false for touch long-press drag (apply y-offset)
     void dragSelectTo(const PointF& screen_point, bool is_mouse = false);
-    /// Ensure cursor is visible after edit scroll
-    void ensureCursorVisible();
     /// Compute edge-scroll state from finger position (does NOT scroll; just updates m_edge_scroll_).
     /// Called from dragHandleTo / dragSelectTo to decide whether edge scrolling is needed.
     void updateEdgeScrollState(const PointF& screen_point, bool is_handle_drag, bool is_mouse);

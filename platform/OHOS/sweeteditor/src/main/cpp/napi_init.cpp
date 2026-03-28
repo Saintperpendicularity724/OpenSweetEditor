@@ -114,6 +114,7 @@ static napi_value Init(napi_env env, napi_value exports)
         // Scrolling/navigation
         NAPI_METHOD("editorScrollToLine", EditorCoreNapi::scrollToLine),
         NAPI_METHOD("editorGotoPosition", EditorCoreNapi::gotoPosition),
+        NAPI_METHOD("editorEnsureCursorVisible", EditorCoreNapi::ensureCursorVisible),
         NAPI_METHOD("editorSetScroll", EditorCoreNapi::setScroll),
         NAPI_METHOD("editorGetScrollMetrics", EditorCoreNapi::getScrollMetrics),
 

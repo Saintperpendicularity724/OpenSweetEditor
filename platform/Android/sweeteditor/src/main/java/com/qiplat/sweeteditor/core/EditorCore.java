@@ -791,6 +791,14 @@ public class EditorCore {
     }
 
     /**
+     * Adjusts scroll offset just enough to keep the current cursor visible in the viewport.
+     */
+    public void ensureCursorVisible() {
+        if (mNativeHandle == 0) return;
+        nativeEnsureCursorVisible(mNativeHandle);
+    }
+
+    /**
      * Manually sets the scroll position (automatically clamped to valid range).
      */
     public void setScroll(float scrollX, float scrollY) {
@@ -1890,6 +1898,9 @@ public class EditorCore {
 
     @CriticalNative
     private static native void nativeGotoPosition(long handle, int line, int column);
+
+    @CriticalNative
+    private static native void nativeEnsureCursorVisible(long handle);
 
     @CriticalNative
     private static native void nativeSetScroll(long handle, float scrollX, float scrollY);

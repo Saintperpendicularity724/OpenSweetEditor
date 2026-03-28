@@ -607,6 +607,9 @@ EDITOR_API void editor_scroll_to_line(intptr_t editor_handle, size_t line, uint8
 /// @param column Column number (0-based)
 EDITOR_API void editor_goto_position(intptr_t editor_handle, size_t line, size_t column);
 
+/// Adjust scroll offset just enough to keep current cursor visible in viewport
+EDITOR_API void editor_ensure_cursor_visible(intptr_t editor_handle);
+
 /// Manually set scroll position (automatically clamped to valid range)
 /// @param scroll_x Horizontal scroll offset
 /// @param scroll_y Vertical scroll offset

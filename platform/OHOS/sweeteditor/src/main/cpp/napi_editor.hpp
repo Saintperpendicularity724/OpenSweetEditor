@@ -1352,6 +1352,16 @@ public:
     return undefined;
   }
 
+  static napi_value ensureCursorVisible(napi_env env, napi_callback_info info) {
+    size_t argc = 1;
+    napi_value args[1];
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+    editor_ensure_cursor_visible(static_cast<intptr_t>(napi_get_handle(env, args[0])));
+    napi_value undefined;
+    napi_get_undefined(env, &undefined);
+    return undefined;
+  }
+
   static napi_value setScroll(napi_env env, napi_callback_info info) {
     size_t argc = 3;
     napi_value args[3];

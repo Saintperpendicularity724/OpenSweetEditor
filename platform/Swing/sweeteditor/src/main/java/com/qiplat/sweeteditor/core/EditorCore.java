@@ -543,6 +543,10 @@ public class EditorCore implements AutoCloseable {
         EditorNative.gotoLine(nativeHandle, line, column);
     }
 
+    public void ensureCursorVisible() {
+        EditorNative.ensureCursorVisible(nativeHandle);
+    }
+
     public void setScroll(float scrollX, float scrollY) {
         EditorNative.setScroll(nativeHandle, scrollX, scrollY);
     }

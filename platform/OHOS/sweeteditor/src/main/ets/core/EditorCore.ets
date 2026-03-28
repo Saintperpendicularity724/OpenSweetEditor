@@ -624,6 +624,10 @@ export class EditorCore {
     native.editorGotoPosition(this.handle, line, column);
   }
 
+  ensureCursorVisible(): void {
+    native.editorEnsureCursorVisible(this.handle);
+  }
+
   setScroll(scrollX: number, scrollY: number): void {
     native.editorSetScroll(this.handle, scrollX, scrollY);
   }

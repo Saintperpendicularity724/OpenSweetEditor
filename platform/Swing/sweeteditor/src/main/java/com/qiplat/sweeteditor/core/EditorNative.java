@@ -490,6 +490,9 @@ public final class EditorNative {
     private static final MethodHandle GOTO_LINE = downcall("editor_goto_position",
             FunctionDescriptor.ofVoid(ValueLayout.JAVA_LONG, ValueLayout.JAVA_LONG, ValueLayout.JAVA_LONG));
 
+    private static final MethodHandle ENSURE_CURSOR_VISIBLE = downcall("editor_ensure_cursor_visible",
+            FunctionDescriptor.ofVoid(ValueLayout.JAVA_LONG));
+
     private static final MethodHandle SET_LINE_SPANS = downcall("editor_set_line_spans",
             FunctionDescriptor.ofVoid(ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG));
 
@@ -1035,6 +1038,12 @@ public final class EditorNative {
     public static void gotoLine(long handle, int line, int column) {
         invokeVoid(() -> {
             GOTO_LINE.invokeExact(handle, (long) line, (long) column);
+        });
+    }
+
+    public static void ensureCursorVisible(long handle) {
+        invokeVoid(() -> {
+            ENSURE_CURSOR_VISIBLE.invokeExact(handle);
         });
     }
 

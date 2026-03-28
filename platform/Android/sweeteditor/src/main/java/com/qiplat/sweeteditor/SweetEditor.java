@@ -5,6 +5,7 @@ import android.content.ClipboardManager;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.PointF;
+import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.os.Build;
 import android.os.Handler;
@@ -17,6 +18,7 @@ import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
+import android.view.WindowInsets;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputMethodManager;
@@ -105,6 +107,11 @@ public class SweetEditor extends View {
     @Nullable
     private EditorRenderModel mCachedModel;
     private boolean mModelDirty = true;
+    private final Rect mVisibleWindowFrame = new Rect();
+    private final int[] mTmpWindowLocation = new int[2];
+    private int mBottomOcclusionInset = 0;
+    private int mAppliedViewportWidth = -1;
+    private int mAppliedViewportHeight = -1;
 
     // ==================== Construction/Init/Lifecycle ====================
 
@@ -187,7 +194,14 @@ public class SweetEditor extends View {
         int width = MeasureSpec.getSize(widthMeasureSpec);
         int height = MeasureSpec.getSize(heightMeasureSpec);
         setMeasuredDimension(width, height);
-        mEditorCore.setViewport(width, height);
+        updateViewport(width, height, false);
+    }
+
+    @Override
+    public WindowInsets onApplyWindowInsets(WindowInsets insets) {
+        WindowInsets appliedInsets = super.onApplyWindowInsets(insets);
+        refreshViewportForVisibleBounds(true);
+        return appliedInsets;
     }
 
     @Override
@@ -307,6 +321,8 @@ public class SweetEditor extends View {
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         mHandler.postDelayed(mCursorBlink, 500);
+        requestApplyInsets();
+        post(() -> refreshViewportForVisibleBounds(false));
     }
 
     @Override
@@ -366,6 +382,7 @@ public class SweetEditor extends View {
     void syncPlatformScale(float scale) {
         mRenderer.syncPlatformScale(scale);
         mEditorCore.onFontMetricsChanged();
+        mModelDirty = true;
     }
 
     void applyTypeface(Typeface typeface) {
@@ -1814,6 +1831,44 @@ public class SweetEditor extends View {
         }
     }
 
+    private void updateViewport(int width, int height, boolean ensureCursorVisible) {
+        if (width < 0 || height < 0) {
+            return;
+        }
+        int effectiveHeight = Math.max(0, height - mBottomOcclusionInset);
+        if (width == mAppliedViewportWidth && effectiveHeight == mAppliedViewportHeight) {
+            return;
+        }
+        boolean viewportNarrowed = mAppliedViewportWidth >= 0 && width < mAppliedViewportWidth;
+        boolean viewportShrunk = mAppliedViewportHeight >= 0 && effectiveHeight < mAppliedViewportHeight;
+        mAppliedViewportWidth = width;
+        mAppliedViewportHeight = effectiveHeight;
+        mEditorCore.setViewport(width, effectiveHeight);
+        mModelDirty = true;
+        if ((ensureCursorVisible || viewportNarrowed || viewportShrunk) && hasWindowFocus()) {
+            mEditorCore.ensureCursorVisible();
+        }
+        postInvalidate();
+    }
+
+    private void refreshViewportForVisibleBounds(boolean ensureCursorVisible) {
+        int occlusionInset = computeBottomOcclusionInset();
+        if (occlusionInset != mBottomOcclusionInset) {
+            mBottomOcclusionInset = occlusionInset;
+        }
+        updateViewport(getWidth(), getHeight(), ensureCursorVisible);
+    }
+
+    private int computeBottomOcclusionInset() {
+        if (getWindowToken() == null || getHeight() <= 0) {
+            return 0;
+        }
+        getWindowVisibleDisplayFrame(mVisibleWindowFrame);
+        getLocationOnScreen(mTmpWindowLocation);
+        int viewBottom = mTmpWindowLocation[1] + getHeight();
+        return Math.max(0, viewBottom - mVisibleWindowFrame.bottom);
+    }
+
     private void scheduleTransientScrollbarRefresh(int requestedDelayMs) {
         ScrollbarConfig config = mRenderer.getScrollbarConfig();
         if (config == null || config.mode != ScrollbarConfig.ScrollbarMode.TRANSIENT) {
@@ -1836,6 +1891,7 @@ public class SweetEditor extends View {
         if (imm != null) {
             imm.showSoftInput(this, InputMethodManager.SHOW_IMPLICIT);
         }
+        requestApplyInsets();
     }
 
     private static int mapAndroidKeyCode(int androidKeyCode) {

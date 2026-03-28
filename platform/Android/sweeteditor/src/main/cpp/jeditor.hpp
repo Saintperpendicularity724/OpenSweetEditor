@@ -737,6 +737,10 @@ public:
     editor_goto_position(static_cast<intptr_t>(handle), static_cast<size_t>(line), static_cast<size_t>(column));
   }
 
+  static void ensureCursorVisible(jlong handle) {
+    editor_ensure_cursor_visible(static_cast<intptr_t>(handle));
+  }
+
   static void setScroll(jlong handle, jfloat scrollX, jfloat scrollY) {
     editor_set_scroll(static_cast<intptr_t>(handle), scrollX, scrollY);
   }
@@ -940,6 +944,7 @@ public:
       {"nativeCanRedo", "(J)Z", (void*) editorCanRedo},
       {"nativeScrollToLine", "(JII)V", (void*) scrollToLine},
       {"nativeGotoPosition", "(JII)V", (void*) gotoPosition},
+      {"nativeEnsureCursorVisible", "(J)V", (void*) ensureCursorVisible},
       {"nativeSetScroll", "(JFF)V", (void*) setScroll},
       {"nativeGetScrollMetrics", "(J)Ljava/nio/ByteBuffer;", (void*) getScrollMetrics},
       {"nativeGetCursorPosition", "(J)J", (void*) getCursorPosition},

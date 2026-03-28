@@ -105,6 +105,7 @@ export const editorGetCursorRect: (handle: number) => number[];
 // Scrolling/navigation
 export const editorScrollToLine: (handle: number, line: number, behavior: number) => void;
 export const editorGotoPosition: (handle: number, line: number, column: number) => void;
+export const editorEnsureCursorVisible: (handle: number) => void;
 export const editorSetScroll: (handle: number, scrollX: number, scrollY: number) => void;
 export const editorGetScrollMetrics: (handle: number) => ArrayBuffer | undefined;
 
