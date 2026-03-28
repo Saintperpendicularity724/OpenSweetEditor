@@ -3,6 +3,7 @@ package com.qiplat.sweeteditor.demo;
 import com.qiplat.sweeteditor.EditorTheme;
 import com.qiplat.sweeteditor.SweetEditor;
 import com.qiplat.sweeteditor.core.Document;
+import com.qiplat.sweeteditor.core.foundation.CurrentLineRenderMode;
 import com.qiplat.sweeteditor.core.foundation.WrapMode;
 
 import javax.swing.BorderFactory;
@@ -65,6 +66,9 @@ public class Main extends JFrame {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+
+        editor.setPerfOverlayEnabled(true);
+        editor.getSettings().setCurrentLineRenderMode(CurrentLineRenderMode.BORDER);
 
         demoProvider = new DemoDecorationProvider();
         editor.addDecorationProvider(demoProvider);

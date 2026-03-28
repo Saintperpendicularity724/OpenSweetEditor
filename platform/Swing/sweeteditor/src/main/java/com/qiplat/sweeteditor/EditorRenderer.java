@@ -5,6 +5,9 @@ import com.qiplat.sweeteditor.core.EditorNative;
 import com.qiplat.sweeteditor.core.adornment.TextStyle;
 import com.qiplat.sweeteditor.core.foundation.CurrentLineRenderMode;
 import com.qiplat.sweeteditor.core.visual.*;
+import com.qiplat.sweeteditor.perf.MeasurePerfStats;
+import com.qiplat.sweeteditor.perf.PerfOverlay;
+import com.qiplat.sweeteditor.perf.PerfStepRecorder;
 
 import java.awt.*;
 import java.awt.font.FontRenderContext;
@@ -37,6 +40,8 @@ final class EditorRenderer implements EditorCore.TextMeasureCallback {
     private final Font baseInlayHintFont;
 
     private EditorIconProvider editorIconProvider;
+    private final MeasurePerfStats measurePerfStats = new MeasurePerfStats();
+    private final PerfOverlay perfOverlay = new PerfOverlay();
     private int currentDrawingLineNumber = -1;
     /**
      * Last draw-time FontRenderContext captured from Graphics2D.
@@ -71,6 +76,22 @@ final class EditorRenderer implements EditorCore.TextMeasureCallback {
         return editorIconProvider;
     }
 
+    MeasurePerfStats getMeasurePerfStats() {
+        return measurePerfStats;
+    }
+
+    PerfOverlay getPerfOverlay() {
+        return perfOverlay;
+    }
+
+    public void setPerfOverlayEnabled(boolean enabled) {
+        perfOverlay.setEnabled(enabled);
+    }
+
+    public boolean isPerfOverlayEnabled() {
+        return perfOverlay.isEnabled();
+    }
+
     public void syncPlatformScale(float scale) {
         if (scale <= 0f) return;
         float textSize = baseRegularFont.getSize2D() * scale;
@@ -91,26 +112,41 @@ final class EditorRenderer implements EditorCore.TextMeasureCallback {
 
     @Override
     public float measureTextWidth(MemorySegment textPtr, int fontStyle) {
+        long startNanos = perfOverlay.isEnabled() ? System.nanoTime() : 0L;
         String text = EditorNative.readUtf16String(textPtr);
         if (text == null || text.isEmpty()) return 0f;
         Font font = getFontByStyle(fontStyle);
         FontRenderContext frc = getFontRenderContext();
-        return (float) font.getStringBounds(text, frc).getWidth();
+        float width = (float) font.getStringBounds(text, frc).getWidth();
+        if (startNanos != 0L) {
+            measurePerfStats.recordText(System.nanoTime() - startNanos, text.length(), fontStyle);
+        }
+        return width;
     }
 
     @Override
     public float measureInlayHintWidth(MemorySegment textPtr) {
+        long startNanos = perfOverlay.isEnabled() ? System.nanoTime() : 0L;
         String text = EditorNative.readUtf16String(textPtr);
         if (text == null || text.isEmpty()) return 0f;
         FontRenderContext frc = getFontRenderContext();
-        return (float) inlayHintFont.getStringBounds(text, frc).getWidth();
+        float width = (float) inlayHintFont.getStringBounds(text, frc).getWidth();
+        if (startNanos != 0L) {
+            measurePerfStats.recordInlay(System.nanoTime() - startNanos, text.length());
+        }
+        return width;
     }
 
     @Override
     public float measureIconWidth(int iconId) {
+        long startNanos = perfOverlay.isEnabled() ? System.nanoTime() : 0L;
         FontRenderContext frc = getFontRenderContext();
         LineMetrics lm = regularFont.getLineMetrics("M", frc);
-        return lm.getAscent() + lm.getDescent();
+        float width = lm.getAscent() + lm.getDescent();
+        if (startNanos != 0L) {
+            measurePerfStats.recordIcon(System.nanoTime() - startNanos);
+        }
+        return width;
     }
 
     @Override
@@ -139,25 +175,51 @@ final class EditorRenderer implements EditorCore.TextMeasureCallback {
 
     public void render(Graphics2D g2, EditorRenderModel model,
                        int viewWidth, int viewHeight, boolean cursorVisible) {
+        PerfStepRecorder drawPerf = perfOverlay.isEnabled() ? PerfStepRecorder.start() : null;
         g2.setColor(theme.backgroundColor);
         g2.fillRect(0, 0, viewWidth, viewHeight);
+        if (drawPerf != null) drawPerf.mark(PerfStepRecorder.STEP_CLEAR);
 
-        if (model == null) return;
+        if (model == null) {
+            if (drawPerf != null) {
+                drawPerf.finish();
+                perfOverlay.recordDraw(drawPerf);
+                perfOverlay.draw(g2, viewWidth);
+            }
+            return;
+        }
 
         drawCurrentLineDecoration(g2, model, 0f, viewWidth);
+        if (drawPerf != null) drawPerf.mark(PerfStepRecorder.STEP_CURRENT);
         drawSelectionRects(g2, model);
+        if (drawPerf != null) drawPerf.mark(PerfStepRecorder.STEP_SELECTION);
         drawLines(g2, model);
+        if (drawPerf != null) drawPerf.mark(PerfStepRecorder.STEP_LINES);
         drawGuideSegments(g2, model);
+        if (drawPerf != null) drawPerf.mark(PerfStepRecorder.STEP_GUIDES);
         if (model.compositionDecoration != null && model.compositionDecoration.active) {
             drawCompositionDecoration(g2, model.compositionDecoration);
         }
+        if (drawPerf != null) drawPerf.mark(PerfStepRecorder.STEP_COMPOSITION);
         drawDiagnosticDecorations(g2, model);
+        if (drawPerf != null) drawPerf.mark(PerfStepRecorder.STEP_DIAGNOSTICS);
         drawLinkedEditingRects(g2, model);
+        if (drawPerf != null) drawPerf.mark(PerfStepRecorder.STEP_LINKED);
         drawBracketHighlightRects(g2, model);
+        if (drawPerf != null) drawPerf.mark(PerfStepRecorder.STEP_BRACKET);
         drawCursor(g2, model, cursorVisible);
+        if (drawPerf != null) drawPerf.mark(PerfStepRecorder.STEP_CURSOR);
         drawGutterOverlay(g2, model, viewWidth, viewHeight);
+        if (drawPerf != null) drawPerf.mark(PerfStepRecorder.STEP_GUTTER);
         drawLineNumbers(g2, model);
+        if (drawPerf != null) drawPerf.mark(PerfStepRecorder.STEP_LINE_NO);
         drawScrollbars(g2, model);
+        if (drawPerf != null) {
+            drawPerf.mark(PerfStepRecorder.STEP_SCROLLBARS);
+            drawPerf.finish();
+            perfOverlay.recordDraw(drawPerf);
+            perfOverlay.draw(g2, viewWidth);
+        }
     }
 
     private Font getFontByStyle(int fontStyle) {
