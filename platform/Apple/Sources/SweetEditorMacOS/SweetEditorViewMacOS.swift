@@ -367,11 +367,11 @@ public class SweetEditorViewMacOS: NSView, NSTextInputClient, CompletionEditorAc
         return (0..<totalLines).map { document.getLineText($0) }
     }
 
-    public func addDecorationProvider(_ provider: DecorationProvider) {
+    public func attachDecorationProvider(_ provider: DecorationProvider) {
         decorationProviderManager?.addProvider(provider)
     }
 
-    public func removeDecorationProvider(_ provider: DecorationProvider) {
+    public func detachDecorationProvider(_ provider: DecorationProvider) {
         decorationProviderManager?.removeProvider(provider)
     }
 
@@ -432,11 +432,11 @@ public class SweetEditorViewMacOS: NSView, NSTextInputClient, CompletionEditorAc
 
     // MARK: - CompletionProvider API
 
-    public func addCompletionProvider(_ provider: CompletionProvider) {
+    public func attachCompletionProvider(_ provider: CompletionProvider) {
         completionProviderManager?.addProvider(provider)
     }
 
-    public func removeCompletionProvider(_ provider: CompletionProvider) {
+    public func detachCompletionProvider(_ provider: CompletionProvider) {
         completionProviderManager?.removeProvider(provider)
     }
 
