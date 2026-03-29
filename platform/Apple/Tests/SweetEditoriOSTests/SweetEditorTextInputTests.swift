@@ -6,6 +6,16 @@ import XCTest
 import UIKit
 
 final class SweetEditorTextInputTests: XCTestCase {
+    func testIOSViewEnablesComposition() {
+        let view = IOSEditorView(frame: .zero)
+        let mirror = Mirror(reflecting: view)
+        let editorCoreAny = mirror.children.first(where: { $0.label == "editorCore" })?.value
+        let editorCore = unwrapOptional(editorCoreAny) as? SweetEditorCore
+
+        XCTAssertNotNil(editorCore)
+        XCTAssertEqual(editorCore?.isCompositionEnabled(), true)
+    }
+
     func testIOSViewExposesUITextInputTokenizer() {
         let textInput: UITextInput = IOSEditorView(frame: .zero)
 
@@ -239,6 +249,24 @@ final class SweetEditorTextInputTests: XCTestCase {
         XCTAssertEqual(textInput.offset(from: textInput.beginningOfDocument, to: selected!.end), 2)
     }
 
+    func testMarkedTextRangeStaysAnchoredAtOriginalCaretAcrossCompositionUpdates() {
+        let view = IOSEditorView(frame: .zero)
+        view.loadDocument(text: "abc")
+
+        let textInput: UITextInput = view
+        let caret = textInput.position(from: textInput.beginningOfDocument, offset: 1)
+        textInput.selectedTextRange = textInput.textRange(from: caret!, to: caret!)
+
+        textInput.setMarkedText("n", selectedRange: NSRange(location: 1, length: 0))
+        textInput.setMarkedText("ni", selectedRange: NSRange(location: 2, length: 0))
+
+        let markedRange = textInput.markedTextRange
+        XCTAssertNotNil(markedRange)
+        XCTAssertEqual(textInput.offset(from: textInput.beginningOfDocument, to: markedRange!.start), 1)
+        XCTAssertEqual(textInput.offset(from: textInput.beginningOfDocument, to: markedRange!.end), 3)
+        XCTAssertEqual(textInput.text(in: markedRange!), "ni")
+    }
+
     func testDeleteSurroundingTextRemovesBeforeAndAfterCaret() {
         let view = IOSEditorView(frame: .zero)
         view.loadDocument(text: "abcdef")
@@ -295,6 +323,13 @@ final class SweetEditorTextInputTests: XCTestCase {
         XCTAssertNotNil(selected)
         XCTAssertEqual(textInput.offset(from: textInput.beginningOfDocument, to: selected!.start), 4)
         XCTAssertEqual(textInput.offset(from: textInput.beginningOfDocument, to: selected!.end), 4)
+    }
+
+    private func unwrapOptional(_ value: Any?) -> Any? {
+        guard let value else { return nil }
+        let mirror = Mirror(reflecting: value)
+        guard mirror.displayStyle == .optional else { return value }
+        return mirror.children.first?.value
     }
 
 }

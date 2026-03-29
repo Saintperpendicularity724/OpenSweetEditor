@@ -79,6 +79,7 @@ class IOSEditorView: UIView, UIKeyInput, UITextInput, UITextInputTraits, UIPoint
 
         editorCore = SweetEditorCore(fontSize: 14.0, fontName: "Menlo")
         editorCore.setScrollbarConfig(scrollbarPolicy.defaultConfig())
+        editorCore.setCompositionEnabled(true)
         EditorRenderer.applyTheme(EditorRenderer.theme, core: editorCore)
         decorationProviderManager = DecorationProviderManager(
             core: editorCore,

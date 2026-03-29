@@ -106,11 +106,20 @@ final class SweetEditorInputConnectioniOS {
 
         let currentSelection = owner.currentSelectionNSRange()
         if isComposing,
-           let existingMarkedRange = markedRangeValue,
-           !NSLocationInRange(currentSelection.location, existingMarkedRange) {
+           let existingMarkedRange = markedRangeValue {
+            let selectionStart = currentSelection.location
+            let selectionEnd = currentSelection.location + currentSelection.length
+            let markedStart = existingMarkedRange.location
+            let markedEnd = existingMarkedRange.location + existingMarkedRange.length
+            let staysWithinMarkedRange = selectionStart >= markedStart && selectionEnd <= markedEnd
+
+            if !staysWithinMarkedRange {
             _ = owner.editorCore.compositionEnd(nil)
             clearLocalCompositionState()
+            }
         }
+
+        let baseRange = markedRangeValue ?? currentSelection
 
         if !isComposing {
             owner.editorCore.compositionStart()
@@ -122,7 +131,6 @@ final class SweetEditorInputConnectioniOS {
 
         owner.editorCore.compositionUpdate(text)
 
-        let baseRange = owner.currentSelectionNSRange()
         markedRangeValue = NSRange(location: baseRange.location, length: text.utf16.count)
         markedTextValue = text
 
