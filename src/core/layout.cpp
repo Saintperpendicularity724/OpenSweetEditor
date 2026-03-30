@@ -1359,9 +1359,11 @@ namespace NS_SWEETEDITOR {
               continue;
             }
             if (visible_start > 0 || visible_len < run.length) {
-              run.x = text_area_x + (run_left + skip_left * char_width) - scroll_x;
+              float crop_offset = skip_left > 0
+                  ? measureWidth(run.text.substr(0, skip_left), run.style.font_style) : 0;
+              run.x = text_area_x + (run_left + crop_offset) - scroll_x;
               run.text = run.text.substr(visible_start, visible_len);
-              run.width = visible_len * char_width;
+              run.width = measureWidth(run.text, run.style.font_style);
             }
           }
         } else {
