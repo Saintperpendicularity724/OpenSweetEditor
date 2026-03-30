@@ -105,6 +105,8 @@ namespace NS_SWEETEDITOR {
     bool gutter_sticky {true};
     /// Whether gutter area is visible (false = hide line numbers, icons, fold arrows)
     bool gutter_visible {true};
+    /// Current auto-wrap mode
+    WrapMode wrap_mode {WrapMode::NONE};
 
     U8String dump() const;
   };

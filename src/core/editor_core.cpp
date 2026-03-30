@@ -63,6 +63,7 @@ namespace NS_SWEETEDITOR {
         + ", scrollbar.fade_duration_ms = " + std::to_string(scrollbar.fade_duration_ms)
         + ", gutter_sticky = " + (gutter_sticky ? "true" : "false")
         + ", gutter_visible = " + (gutter_visible ? "true" : "false")
+        + ", wrap_mode = " + std::to_string(static_cast<int>(wrap_mode))
         + "}";
   }
   EditorCore::EditorCore(const Ptr<TextMeasurer>& measurer, const EditorOptions& options): m_measurer_(measurer), m_options_(options) {
@@ -142,8 +143,7 @@ m_fling_ = makeUPtr<FlingAnimator>(tc);
     float old_line_height = m_text_layout_->getLineHeight();
     PendingScaleAnchor scale_anchor = m_pending_scale_anchor_;
     m_pending_scale_anchor_.active = false;
-
-    // ── Anchor-based scroll preservation ──
+    // Anchor-based scroll preservation
     // Before resetting the measurer, find which logical line sits at the
     // viewport top and what fraction of that line has been scrolled past.
     // After the font change we recompute scroll_y purely from the integer
@@ -186,8 +186,38 @@ m_fling_ = makeUPtr<FlingAnimator>(tc);
     m_text_layout_->resetMeasurer();
     float new_line_height = m_text_layout_->getLineHeight();
 
-    // All line heights are now invalid and must be relaid out
-    markAllLinesDirty(true);
+    // Keep old wrap heights during scale-anchor relayout so prefix estimation stays stable.
+    const bool use_wrap_scale_anchor = scale_anchor.active && m_settings_.wrap_mode != WrapMode::NONE && m_document_ != nullptr;
+    markAllLinesDirty(!use_wrap_scale_anchor);
+    const float wrap_scale_ratio = (old_line_height > 0) ? (new_line_height / old_line_height) : 1.0f;
+    const float wrap_text_area_width = std::max(1.0f, m_viewport_.width - m_text_layout_->getLayoutMetrics().textAreaX());
+    if (use_wrap_scale_anchor) {
+      auto& lines = m_document_->getLogicalLines();
+      auto estimate_wrap_height = [&](const LogicalLine& line) -> float {
+        if (line.is_fold_hidden) return 0.0f;
+        if (line.visual_lines.empty()) {
+          const float old_height = (line.height >= 0) ? line.height : old_line_height;
+          return std::max(new_line_height, old_height * wrap_scale_ratio);
+        }
+        float old_total_width = 0.0f;
+        for (const auto& vl : line.visual_lines) {
+          for (const auto& run : vl.runs) {
+            old_total_width += run.width;
+          }
+        }
+        if (old_total_width <= 0.0f) {
+          const float old_height = (line.height >= 0) ? line.height : old_line_height;
+          return std::max(new_line_height, old_height * wrap_scale_ratio);
+        }
+        const float new_total_width_est = old_total_width * wrap_scale_ratio;
+        const float estimated_wrap_count = std::max(1.0f, std::ceil(new_total_width_est / wrap_text_area_width));
+        return estimated_wrap_count * new_line_height;
+      };
+      const size_t estimate_end = std::min(anchor_line, lines.size());
+      for (size_t i = 0; i < estimate_end; ++i) {
+        lines[i].height = estimate_wrap_height(lines[i]);
+      }
+    }
 
     // Recompute scroll_y from anchor using the NEW prefix index.
     // getLineStartY rebuilds the prefix index (which now uses the fixed
@@ -197,7 +227,22 @@ m_fling_ = makeUPtr<FlingAnimator>(tc);
     if (scale_anchor.active) {
       CursorRect anchor_rect = getPositionScreenRect(scale_anchor.anchor_position);
       float target_scroll_x = m_view_state_.scroll_x + (anchor_rect.x + scale_anchor.offset_x - scale_anchor.focus_screen.x);
-      float target_scroll_y = m_view_state_.scroll_y + (anchor_rect.y + scale_anchor.offset_y - scale_anchor.focus_screen.y);
+      float target_scroll_y = 0.0f;
+      if (m_settings_.wrap_mode == WrapMode::NONE) {
+        target_scroll_y = m_view_state_.scroll_y + (anchor_rect.y + scale_anchor.offset_y - scale_anchor.focus_screen.y);
+      } else if (m_document_ != nullptr) {
+        auto& lines = m_document_->getLogicalLines();
+        if (anchor_line < lines.size()) {
+          m_text_layout_->layoutLine(anchor_line, lines[anchor_line]);
+          float new_anchor_y = lines[anchor_line].start_y;
+          float new_anchor_h = (lines[anchor_line].height >= 0) ? lines[anchor_line].height : new_line_height;
+          target_scroll_y = new_anchor_y + anchor_fraction * new_anchor_h;
+        } else {
+          target_scroll_y = m_view_state_.scroll_y + (anchor_rect.y + scale_anchor.offset_y - scale_anchor.focus_screen.y);
+        }
+      } else {
+        target_scroll_y = m_view_state_.scroll_y + (anchor_rect.y + scale_anchor.offset_y - scale_anchor.focus_screen.y);
+      }
       if (m_scale_gesture_active_) {
         m_view_state_.scroll_x = target_scroll_x;
         m_view_state_.scroll_y = target_scroll_y;
@@ -224,6 +269,7 @@ m_fling_ = makeUPtr<FlingAnimator>(tc);
   }
 
   void EditorCore::setWrapMode(WrapMode mode) {
+    m_settings_.wrap_mode = mode;
     m_text_layout_->setWrapMode(mode);
     markAllLinesDirty();
     normalizeScrollState();
@@ -824,8 +870,7 @@ m_fling_ = makeUPtr<FlingAnimator>(tc);
     if (scale_gesture_end) {
       m_scale_gesture_active_ = false;
     }
-
-    // For SCALE gestures, skip premature normalize �?metrics haven't been updated yet.
+    // For SCALE gestures, skip premature normalize; metrics have not been updated yet.
     // Platform will call onFontMetricsChanged() which normalizes with correct metrics.
     if (result.type == GestureType::SCALE) {
       m_text_layout_->setViewState(m_view_state_);
