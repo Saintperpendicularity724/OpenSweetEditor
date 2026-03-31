@@ -36,20 +36,20 @@ It is suited for long-term editor infrastructure in IDEs, AI programming tools, 
 
 ## Platform Support Status
 
-| Platform | Status | Rendering Technology | UI Framework | Implementation |
-| --- | --- | --- | --- | --- |
-| Android | Implemented | Canvas + Paint | Android View | this repo: [platform/Android](./platform/Android) |
-| iOS | Implemented | CoreText + CoreGraphics | UIKit / SwiftUI (being refined) | this repo: [platform/Apple](./platform/Apple) |
-| macOS | Implemented | CoreText + CoreGraphics | AppKit / SwiftUI (being refined) | this repo: [platform/Apple](./platform/Apple) |
-| Windows | Implemented | GDI+ | WinForms | this repo: [platform/WinForms](./platform/WinForms) |
-| Swing | Implemented | Java2D | Swing | this repo: [platform/Swing](./platform/Swing) |
-| OHOS | Implemented | ArkUI Canvas | ArkUI | this repo: [platform/OHOS](./platform/OHOS) |
-| Web | Testing (Unofficial) | - | - | fork repo: [LangLang03/OpenSweetEditor-Web](https://github.com/LangLang03/OpenSweetEditor-Web/tree/main/platform/Emscripten) |
-| Flutter | In Progress | - | Flutter | - |
-| Compose Multiplatform | In Progress | Compose Canvas | Compose | fork repo: [SweetEditor-Compose](https://github.com/lumkit/SweetEditor-Compose) |
-| Qt | Planned | - | Qt | - |
-| C# Avalonia UI | Planned | - | - | - |
-| C# WinUI | Planned | - | - | - |
+| Platform | Status | Rendering Technology    | UI Framework | Implementation                                                                                                               |
+| --- | --- |-------------------------| --- |------------------------------------------------------------------------------------------------------------------------------|
+| Android | Implemented | Canvas + Paint          | Android View | this repo: [platform/Android](./platform/Android)                                                                            |
+| iOS | Implemented | CoreText + CoreGraphics | UIKit / SwiftUI (being refined) | this repo: [platform/Apple](./platform/Apple)                                                                                |
+| macOS | Implemented | CoreText + CoreGraphics | AppKit / SwiftUI (being refined) | this repo: [platform/Apple](./platform/Apple)                                                                                |
+| Windows | Implemented | GDI+                    | WinForms | this repo: [platform/WinForms](./platform/WinForms)                                                                          |
+| Swing | Implemented | Java2D                  | Swing | this repo: [platform/Swing](./platform/Swing)                                                                                |
+| OHOS | Implemented | ArkUI Canvas            | ArkUI | this repo: [platform/OHOS](./platform/OHOS)                                                                                  |
+| Flutter | Implemented | TextPainter             | Flutter | this repo: [platform/Flutter](./platform/Flutter)                                                                               |
+| Compose Multiplatform | In Progress | Compose Canvas          | Compose | fork repo: [SweetEditor-Compose](https://github.com/lumkit/SweetEditor-Compose)                                              |
+| Web | Testing (Unofficial) | -                       | - | fork repo: [LangLang03/OpenSweetEditor-Web](https://github.com/LangLang03/OpenSweetEditor-Web/tree/main/platform/Emscripten) |
+| Qt | Planned | -                       | Qt | -                                                                                                                            |
+| C# Avalonia UI | Planned | -                       | - | -                                                                                                                            |
+| C# WinUI | Planned | -                       | - | -                                                                                                                            |
 
 ## Overall Architecture
 
