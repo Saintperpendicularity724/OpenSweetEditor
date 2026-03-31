@@ -100,6 +100,7 @@ public class SweetEditor extends View {
     private static final boolean ENABLE_PERF_LOG = true;
     private static final int PERF_LOG_INTERVAL = 60;
     private static final float DEFAULT_CONTENT_START_PADDING_DP = 3.0f;
+    private static final int DEFAULT_LANGUAGE_TAB_SIZE = 4;
 
     private EditorRenderer mRenderer;
     private int mPerfLogFrameCount = 0;
@@ -500,7 +501,7 @@ public class SweetEditor extends View {
      */
     public EditorCore.TextEditResult deleteText(@NonNull TextRange range) {
         EditorCore.TextEditResult result = mEditorCore.deleteText(range);
-        dispatchTextChanged(TextChangeAction.INSERT, result);
+        dispatchTextChanged(TextChangeAction.DELETE, result);
         resetCursorBlink();
         flush();
         return result;
@@ -883,6 +884,15 @@ public class SweetEditor extends View {
     }
 
     /**
+     * Register multiple reusable highlight styles in one batch.
+     *
+     * @param stylesById style ID -> style mapping; null or empty input is ignored
+     */
+    public void registerBatchTextStyles(@Nullable Map<Integer, TextStyle> stylesById) {
+        mEditorCore.registerBatchTextStyles(stylesById);
+    }
+
+    /**
      * Set highlight spans for a specified line and layer using a list of {@link StyleSpan}.
      *
      * @param line  Line number (0-based)
@@ -1253,22 +1263,11 @@ public class SweetEditor extends View {
      */
     public void setLanguageConfiguration(@Nullable LanguageConfiguration config) {
         mLanguageConfiguration = config;
-        if (config != null) {
-            if (!config.getBrackets().isEmpty()) {
-                int size = config.getBrackets().size();
-                int[] opens = new int[size];
-                int[] closes = new int[size];
-                for (int i = 0; i < size; i++) {
-                    LanguageConfiguration.BracketPair pair = config.getBrackets().get(i);
-                    opens[i] = pair.open.isEmpty() ? 0 : pair.open.codePointAt(0);
-                    closes[i] = pair.close.isEmpty() ? 0 : pair.close.codePointAt(0);
-                }
-                mEditorCore.setBracketPairs(opens, closes);
-            }
-            if (config.getTabSize() > 0) {
-                mEditorCore.setTabSize(config.getTabSize());
-            }
+        syncLanguageConfigurationToCore(config);
+        if (mDecorationProviderManager != null) {
+            mDecorationProviderManager.requestRefresh();
         }
+        flush();
     }
 
     @Nullable
@@ -1284,6 +1283,30 @@ public class SweetEditor extends View {
     @Nullable
     public <T extends EditorMetadata> T getMetadata() {
         return (T) mMetadata;
+    }
+
+    private void syncLanguageConfigurationToCore(@Nullable LanguageConfiguration config) {
+        int[] opens = new int[0];
+        int[] closes = new int[0];
+        int tabSize = DEFAULT_LANGUAGE_TAB_SIZE;
+
+        if (config != null) {
+            List<LanguageConfiguration.BracketPair> brackets = config.getBrackets();
+            int size = brackets.size();
+            opens = new int[size];
+            closes = new int[size];
+            for (int i = 0; i < size; i++) {
+                LanguageConfiguration.BracketPair pair = brackets.get(i);
+                opens[i] = pair.open.isEmpty() ? 0 : pair.open.codePointAt(0);
+                closes[i] = pair.close.isEmpty() ? 0 : pair.close.codePointAt(0);
+            }
+            if (config.getTabSize() > 0) {
+                tabSize = config.getTabSize();
+            }
+        }
+
+        mEditorCore.setBracketPairs(opens, closes);
+        mEditorCore.setTabSize(tabSize);
     }
 
     /**
