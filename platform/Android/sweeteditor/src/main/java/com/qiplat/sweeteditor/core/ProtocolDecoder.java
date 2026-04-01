@@ -80,7 +80,8 @@ final class ProtocolDecoder {
             }
             editResult = new EditorCore.TextEditResult(true, changes);
         }
-        return new EditorCore.KeyEventResult(handled, contentChanged, cursorChanged, selectionChanged, editResult);
+        int command = data.remaining() >= 4 ? data.getInt() : 0;
+        return new EditorCore.KeyEventResult(handled, contentChanged, cursorChanged, selectionChanged, editResult, command);
     }
 
     static EditorCore.GestureResult decodeGestureResult(@Nullable ByteBuffer data) {

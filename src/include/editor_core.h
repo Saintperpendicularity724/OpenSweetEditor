@@ -36,6 +36,8 @@ namespace NS_SWEETEDITOR {
     float fling_max_velocity {8000.0f};
     /// Max undo stack size (0 = unlimited)
     size_t max_undo_stack_size {512};
+    /// Multi-chord key binding timeout in milliseconds
+    int64_t key_chord_timeout_ms {2000};
 
     TouchConfig simpleAsTouchConfig() const;
     U8String dump() const;
@@ -162,6 +164,8 @@ namespace NS_SWEETEDITOR {
     bool selection_changed {false};
     /// Exact text edit info (valid when content_changed is true)
     TextEditResult edit_result;
+    /// Resolved command (for platform-handled commands like COPY/PASTE/CUT)
+    EditorCommand command {EditorCommand::NONE};
   };
 
   /// IME composition state
@@ -301,6 +305,9 @@ namespace NS_SWEETEDITOR {
     /// @return Keyboard event handling result
     KeyEventResult handleKeyEvent(const KeyEvent& event);
 
+    /// Replace the current key map with a custom one
+    void setKeyMap(KeyMap key_map);
+
 #pragma endregion
 
 #pragma region [Editing & Cursor/IME]
@@ -425,6 +432,14 @@ namespace NS_SWEETEDITOR {
     /// Move cursor to line end
     /// @param extend_selection Whether to extend selection
     void moveCursorToLineEnd(bool extend_selection = false);
+
+    /// Move cursor up by one page (viewport height / line height)
+    /// @param extend_selection Whether to extend selection
+    void moveCursorPageUp(bool extend_selection = false);
+
+    /// Move cursor down by one page (viewport height / line height)
+    /// @param extend_selection Whether to extend selection
+    void moveCursorPageDown(bool extend_selection = false);
     /// Notify editor that IME composition starts
     /// Called by platform side when compositionstart / composingText starts
     void compositionStart();
@@ -666,6 +681,7 @@ namespace NS_SWEETEDITOR {
     UPtr<TextLayout> m_text_layout_;
     UPtr<UndoManager> m_undo_manager_;
     UPtr<FlingAnimator> m_fling_;
+    KeyResolver m_key_resolver_;
     // Cache of render height for each logical line
     HashMap<size_t, float> m_line_heights_;
 
@@ -850,7 +866,7 @@ namespace NS_SWEETEDITOR {
 
   NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(TextChange, range, old_text, new_text)
   NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(TextEditResult, changed, changes, cursor_before, cursor_after)
-  NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(KeyEventResult, handled, content_changed, cursor_changed, selection_changed, edit_result)
+  NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(KeyEventResult, handled, content_changed, cursor_changed, selection_changed, edit_result, command)
 }
 
 #endif //SWEETEDITOR_EDITOR_CORE_H

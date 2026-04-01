@@ -15,6 +15,7 @@ import com.qiplat.sweeteditor.core.adornment.FlowGuide;
 import com.qiplat.sweeteditor.core.adornment.IndentGuide;
 import com.qiplat.sweeteditor.core.adornment.SeparatorGuide;
 import com.qiplat.sweeteditor.core.adornment.InlayHint;
+import com.qiplat.sweeteditor.core.keymap.KeyMap;
 import com.qiplat.sweeteditor.core.visual.CursorRect;
 import com.qiplat.sweeteditor.core.visual.EditorRenderModel;
 import com.qiplat.sweeteditor.core.snippet.LinkedEditingModel;
@@ -309,6 +310,15 @@ public class EditorCore {
         } finally {
             nativeFreeBinaryData(data);
         }
+    }
+
+    public void setKeyMap(@NonNull ByteBuffer data) {
+        if (mNativeHandle == 0) return;
+        nativeSetKeyMap(mNativeHandle, data);
+    }
+
+    public void setKeyMap(@NonNull KeyMap keyMap) {
+        setKeyMap(ProtocolEncoder.packKeyMap(keyMap));
     }
 
     // ==================== Text Editing ====================
@@ -1456,6 +1466,7 @@ public class EditorCore {
         public final boolean selectionChanged;
         @NonNull
         public final TextEditResult editResult;
+        public final int command;
 
         public KeyEventResult() {
             this.handled = false;
@@ -1463,15 +1474,22 @@ public class EditorCore {
             this.cursorChanged = false;
             this.selectionChanged = false;
             this.editResult = TextEditResult.EMPTY;
+            this.command = 0;
         }
 
         public KeyEventResult(boolean handled, boolean contentChanged, boolean cursorChanged,
                               boolean selectionChanged, @NonNull TextEditResult editResult) {
+            this(handled, contentChanged, cursorChanged, selectionChanged, editResult, 0);
+        }
+
+        public KeyEventResult(boolean handled, boolean contentChanged, boolean cursorChanged,
+                              boolean selectionChanged, @NonNull TextEditResult editResult, int command) {
             this.handled = handled;
             this.contentChanged = contentChanged;
             this.cursorChanged = cursorChanged;
             this.selectionChanged = selectionChanged;
             this.editResult = editResult;
+            this.command = command;
         }
 
         @NonNull
@@ -1479,7 +1497,7 @@ public class EditorCore {
         public String toString() {
             return "KeyEventResult{handled=" + handled + ", contentChanged=" + contentChanged +
                     ", cursorChanged=" + cursorChanged + ", selectionChanged=" + selectionChanged +
-                    ", editResult=" + editResult + '}';
+                    ", command=" + command + ", editResult=" + editResult + '}';
         }
     }
 
@@ -1775,6 +1793,9 @@ public class EditorCore {
 
     @FastNative
     private static native ByteBuffer nativeHandleKeyEvent(long handle, int keyCode, String text, int modifiers);
+
+    @FastNative
+    private static native void nativeSetKeyMap(long handle, ByteBuffer data);
 
     @FastNative
     private static native ByteBuffer nativeInsertText(long handle, String text);

@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <macro.h>
+#include <keymap.h>
 
 namespace NS_SWEETEDITOR {
   /// Text position
@@ -75,42 +76,6 @@ namespace NS_SWEETEDITOR {
     U8String dump() const;
   };
 
-  /// Keyboard key code definitions
-  enum struct KeyCode : uint16_t {
-    NONE = 0,
-    BACKSPACE = 8,
-    TAB = 9,
-    ENTER = 13,
-    ESCAPE = 27,
-    DELETE_KEY = 46,
-    LEFT = 37,
-    UP = 38,
-    RIGHT = 39,
-    DOWN = 40,
-    HOME = 36,
-    END = 35,
-    PAGE_UP = 33,
-    PAGE_DOWN = 34,
-    A = 65,
-    C = 67,
-    V = 86,
-    X = 88,
-    Z = 90,
-    Y = 89,
-    K = 75,
-  };
-
-  /// Modifier key flags
-  enum struct Modifier : uint8_t {
-    NONE  = 0,
-    SHIFT = 1 << 0,
-    CTRL  = 1 << 1,
-    ALT   = 1 << 2,
-    META  = 1 << 3,
-  };
-  inline Modifier operator&(Modifier a, Modifier b) { return static_cast<Modifier>(static_cast<uint8_t>(a) & static_cast<uint8_t>(b)); }
-  inline Modifier operator|(Modifier a, Modifier b) { return static_cast<Modifier>(static_cast<uint8_t>(a) | static_cast<uint8_t>(b)); }
-
   /// Keyboard event data
   struct KeyEvent {
     /// Key code
@@ -118,7 +83,7 @@ namespace NS_SWEETEDITOR {
     /// Input text (used for regular character input, such as letters, numbers, symbols)
     U8String text;
     /// Modifier key state
-    Modifier modifiers {Modifier::NONE};
+    KeyModifier modifiers {KeyModifier::NONE};
 
     /// Whether this is plain text input (no special key code, text only)
     bool isTextInput() const { return key_code == KeyCode::NONE && !text.empty(); }

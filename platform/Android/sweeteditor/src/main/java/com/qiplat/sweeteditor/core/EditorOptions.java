@@ -16,39 +16,64 @@ package com.qiplat.sweeteditor.core;
  *   f32  fling_min_velocity
  *   f32  fling_max_velocity
  *   u64  max_undo_stack_size
+ *   i64  key_chord_timeout_ms
  * </pre>
  */
 public class EditorOptions {
-    /** Threshold to determine if a gesture is a move; below this threshold, it's considered a tap */
+    /**
+     * Threshold to determine if a gesture is a move; below this threshold, it's considered a tap
+     */
     public final float touchSlop;
-    /** Double-tap time threshold (milliseconds) */
+    /**
+     * Double-tap time threshold (milliseconds)
+     */
     public final long doubleTapTimeout;
-    /** Long press time threshold (milliseconds) */
+    /**
+     * Long press time threshold (milliseconds)
+     */
     public final long longPressMs;
-    /** Fling friction coefficient (higher = faster deceleration) */
+    /**
+     * Fling friction coefficient (higher = faster deceleration)
+     */
     public final float flingFriction;
-    /** Minimum fling velocity threshold in pixels/second */
+    /**
+     * Minimum fling velocity threshold in pixels/second
+     */
     public final float flingMinVelocity;
-    /** Maximum fling velocity cap in pixels/second */
+    /**
+     * Maximum fling velocity cap in pixels/second
+     */
     public final float flingMaxVelocity;
-    /** Max undo stack size (0 = unlimited) */
+    /**
+     * Max undo stack size (0 = unlimited)
+     */
     public final long maxUndoStackSize;
+    /**
+     * Key chord pending timeout in milliseconds (default 2000)
+     */
+    public final long keyChordTimeoutMs;
 
     public EditorOptions() {
-this(10f, 300, 500, 2.0f, 30f, 12000f, 512);
+        this(10f, 300, 500, 2.0f, 30f, 12000f, 512, 2000);
     }
 
     public EditorOptions(float touchSlop, long doubleTapTimeout) {
-this(touchSlop, doubleTapTimeout, 500, 2.0f, 30f, 12000f, 512);
+        this(touchSlop, doubleTapTimeout, 500, 2.0f, 30f, 12000f, 512, 2000);
     }
 
     public EditorOptions(float touchSlop, long doubleTapTimeout, long longPressMs, long maxUndoStackSize) {
-this(touchSlop, doubleTapTimeout, longPressMs, 2.0f, 30f, 12000f, maxUndoStackSize);
+        this(touchSlop, doubleTapTimeout, longPressMs, 2.0f, 30f, 12000f, maxUndoStackSize, 2000);
     }
 
     public EditorOptions(float touchSlop, long doubleTapTimeout, long longPressMs,
                          float flingFriction, float flingMinVelocity, float flingMaxVelocity,
                          long maxUndoStackSize) {
+        this(touchSlop, doubleTapTimeout, longPressMs, flingFriction, flingMinVelocity, flingMaxVelocity, maxUndoStackSize, 2000);
+    }
+
+    public EditorOptions(float touchSlop, long doubleTapTimeout, long longPressMs,
+                         float flingFriction, float flingMinVelocity, float flingMaxVelocity,
+                         long maxUndoStackSize, long keyChordTimeoutMs) {
         this.touchSlop = touchSlop;
         this.doubleTapTimeout = doubleTapTimeout;
         this.longPressMs = longPressMs;
@@ -56,5 +81,6 @@ this(touchSlop, doubleTapTimeout, longPressMs, 2.0f, 30f, 12000f, maxUndoStackSi
         this.flingMinVelocity = flingMinVelocity;
         this.flingMaxVelocity = flingMaxVelocity;
         this.maxUndoStackSize = maxUndoStackSize;
+        this.keyChordTimeoutMs = keyChordTimeoutMs;
     }
 }

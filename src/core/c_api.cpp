@@ -359,6 +359,7 @@ static const uint8_t* keyEventResultToBinary(const KeyEventResult& result, size_
   if (has_edit) {
     appendTextEditChanges(buffer, result.edit_result.changes);
   }
+  appendI32(buffer, static_cast<int32_t>(result.command));
   return allocBinaryPayload(buffer.data(), buffer.size(), out_size);
 }
 
@@ -551,6 +552,7 @@ intptr_t create_editor(text_measurer_t measurer, const uint8_t* options_data, si
     readF32(options.fling_min_velocity);
     readF32(options.fling_max_velocity);
     readU64(options.max_undo_stack_size);
+    readI64(options.key_chord_timeout_ms);
   }
   Ptr<EditorCore> editor_core = makePtr<EditorCore>(c_measurer, options);
   return toIntPtr(editor_core);
@@ -755,7 +757,7 @@ const uint8_t* handle_editor_gesture_event_ex(intptr_t editor_handle, uint8_t ty
   }
   GestureEvent event;
   event.type = static_cast<EventType>(type);
-  event.modifiers = static_cast<Modifier>(modifiers);
+  event.modifiers = static_cast<KeyModifier>(modifiers);
   event.wheel_delta_x = wheel_delta_x;
   event.wheel_delta_y = wheel_delta_y;
   event.direct_scale = direct_scale;
@@ -812,12 +814,63 @@ const uint8_t* handle_editor_key_event(intptr_t editor_handle, uint16_t key_code
   }
   KeyEvent event;
   event.key_code = static_cast<KeyCode>(key_code);
-  event.modifiers = static_cast<Modifier>(modifiers);
+  event.modifiers = static_cast<KeyModifier>(modifiers);
   if (text != nullptr) {
     event.text = text;
   }
   KeyEventResult result = editor_core->handleKeyEvent(event);
   return keyEventResultToBinary(result, out_size);
+}
+
+void editor_set_keymap(intptr_t editor_handle, const uint8_t* data, size_t size) {
+  Ptr<EditorCore> editor_core = getCPtrHolderValue<EditorCore>(editor_handle);
+  if (editor_core == nullptr || data == nullptr || size < 4) return;
+
+  size_t offset = 0;
+  auto readU32 = [&]() -> uint32_t {
+    if (offset + 4 > size) return 0;
+    uint32_t v;
+    std::memcpy(&v, data + offset, 4);
+    offset += 4;
+    return v;
+  };
+  auto readU16 = [&]() -> uint16_t {
+    if (offset + 2 > size) return 0;
+    uint16_t v;
+    std::memcpy(&v, data + offset, 2);
+    offset += 2;
+    return v;
+  };
+  auto readU8 = [&]() -> uint8_t {
+    if (offset + 1 > size) return 0;
+    uint8_t v = data[offset];
+    offset += 1;
+    return v;
+  };
+
+  uint32_t count = readU32();
+  if (count == 0) return;
+
+  const size_t per_binding = 1 + 2 + 1 + 2 + 4; // u8+u16+u8+u16+u32 = 10 bytes
+  if (size < 4 + count * per_binding) return;
+
+  Vector<KeyBinding> bindings;
+  bindings.reserve(count);
+  for (uint32_t i = 0; i < count; ++i) {
+    KeyBinding b;
+    b.first.modifiers = static_cast<KeyModifier>(readU8());
+    b.first.key_code = static_cast<KeyCode>(readU16());
+    b.second.modifiers = static_cast<KeyModifier>(readU8());
+    b.second.key_code = static_cast<KeyCode>(readU16());
+    b.command = static_cast<EditorCommand>(readU32());
+    bindings.push_back(b);
+  }
+
+  KeyMap km;
+  for (const auto& b : bindings) {
+    km.addBinding(b);
+  }
+  editor_core->setKeyMap(std::move(km));
 }
 
 #pragma endregion

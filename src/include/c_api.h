@@ -94,6 +94,7 @@ EDITOR_API const U16Char* get_document_line_text(intptr_t document_handle, size_
 ///        f32 fling_min_velocity — Minimum fling velocity in px/s (default 50)
 ///        f32 fling_max_velocity — Maximum fling velocity in px/s (default 8000)
 ///        u64 max_undo_stack_size — Max undo stack depth, 0=unlimited (default 512)
+///        i64 key_chord_timeout_ms — Key chord pending timeout in ms (default 2000)
 /// @param options_size Byte length of options_data
 /// @return EditorCore handle
 EDITOR_API intptr_t create_editor(text_measurer_t measurer, const uint8_t* options_data, size_t options_size);
@@ -409,6 +410,18 @@ EDITOR_API const uint8_t* editor_tick_animations(intptr_t editor_handle, size_t*
 /// @param modifiers Modifier key flags(SHIFT=1, CTRL=2, ALT=4, META=8)
 /// @return KeyEventResult binary payload, returns NULL on failure
 EDITOR_API const uint8_t* handle_editor_key_event(intptr_t editor_handle, uint16_t key_code, const char* text, uint8_t modifiers, size_t* out_size);
+
+/// Set custom key map from binary payload.
+/// Payload format (LE byte order):
+///   u32 binding_count
+///   Repeat binding_count times:
+///     u8  first_modifiers
+///     u16 first_key_code
+///     u8  second_modifiers
+///     u16 second_key_code  (0 = single-chord)
+///     u32 command          (EditorCommand enum value)
+/// Invalid or empty payload is ignored (current key map is preserved).
+EDITOR_API void editor_set_keymap(intptr_t editor_handle, const uint8_t* data, size_t size);
 
 #pragma endregion
 

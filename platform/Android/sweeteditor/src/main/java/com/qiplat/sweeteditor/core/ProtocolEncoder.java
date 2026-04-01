@@ -5,6 +5,8 @@ import android.util.SparseArray;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.qiplat.sweeteditor.core.keymap.KeyBinding;
+import com.qiplat.sweeteditor.core.keymap.KeyMap;
 import com.qiplat.sweeteditor.core.adornment.DiagnosticItem;
 import com.qiplat.sweeteditor.core.adornment.FoldRegion;
 import com.qiplat.sweeteditor.core.adornment.GutterIcon;
@@ -36,14 +38,14 @@ public final class ProtocolEncoder {
     /**
      * Pack EditorOptions into a direct ByteBuffer for zero-copy JNI transfer.
      * <p>
-     * Format (LE): f32 touch_slop, i64 double_tap_timeout, i64 long_press_ms, f32 fling_friction, f32 fling_min_velocity, f32 fling_max_velocity, u64 max_undo_stack_size
+     * Format (LE): f32 touch_slop, i64 double_tap_timeout, i64 long_press_ms, f32 fling_friction, f32 fling_min_velocity, f32 fling_max_velocity, u64 max_undo_stack_size, i64 key_chord_timeout_ms
      *
      * @param options editor construction options
-     * @return packed direct ByteBuffer (40 bytes, flipped)
+     * @return packed direct ByteBuffer (48 bytes, flipped)
      */
     public static ByteBuffer packEditorOptions(@NonNull EditorOptions options) {
-        // 4 + 8 + 8 + 4 + 4 + 4 + 8 = 40 bytes
-        ByteBuffer payload = ByteBuffer.allocateDirect(40).order(ByteOrder.LITTLE_ENDIAN);
+        // 4 + 8 + 8 + 4 + 4 + 4 + 8 + 8 = 48 bytes
+        ByteBuffer payload = ByteBuffer.allocateDirect(48).order(ByteOrder.LITTLE_ENDIAN);
         payload.putFloat(options.touchSlop);
         payload.putLong(options.doubleTapTimeout);
         payload.putLong(options.longPressMs);
@@ -51,6 +53,7 @@ public final class ProtocolEncoder {
         payload.putFloat(options.flingMinVelocity);
         payload.putFloat(options.flingMaxVelocity);
         payload.putLong(options.maxUndoStackSize);
+        payload.putLong(options.keyChordTimeoutMs);
         payload.flip();
         return payload;
     }
@@ -719,6 +722,48 @@ public final class ProtocolEncoder {
                 payload.putInt(item.severity);
                 payload.putInt(item.color);
             }
+        }
+        payload.flip();
+        return payload;
+    }
+
+    /**
+     * Encode key bindings into binary payload for editor_set_keymap C API.
+     * Format: u32 count + repeat [u16 firstKey, u8 firstMods, u16 secondKey, u8 secondMods, u32 command]
+     */
+    public static ByteBuffer packKeyMap(List<KeyBinding> bindings) {
+        int count = (bindings != null) ? bindings.size() : 0;
+        ByteBuffer payload = ByteBuffer.allocateDirect(4 + count * 10)
+                .order(ByteOrder.LITTLE_ENDIAN);
+        payload.putInt(count);
+        for (int i = 0; i < count; i++) {
+            KeyBinding b = bindings.get(i);
+            payload.put((byte) b.first.modifiers);
+            payload.putShort((short) b.first.keyCode);
+            payload.put((byte) b.second.modifiers);
+            payload.putShort((short) b.second.keyCode);
+            payload.putInt(b.command);
+        }
+        payload.flip();
+        return payload;
+    }
+
+    /**
+     * Encode all bindings from a {@link KeyMap} into binary payload for editor_set_keymap C API.
+     */
+    public static ByteBuffer packKeyMap(@NonNull KeyMap keyMap) {
+        Map<KeyBinding, Integer> bindings = keyMap.getBindings();
+        int count = bindings.size();
+        ByteBuffer payload = ByteBuffer.allocateDirect(4 + count * 10)
+                .order(ByteOrder.LITTLE_ENDIAN);
+        payload.putInt(count);
+        for (Map.Entry<KeyBinding, Integer> entry : bindings.entrySet()) {
+            KeyBinding b = entry.getKey();
+            payload.put((byte) b.first.modifiers);
+            payload.putShort((short) b.first.keyCode);
+            payload.put((byte) (b.second != null ? b.second.modifiers : 0));
+            payload.putShort((short) (b.second != null ? b.second.keyCode : 0));
+            payload.putInt(entry.getValue());
         }
         payload.flip();
         return payload;

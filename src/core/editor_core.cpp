@@ -43,7 +43,7 @@ namespace NS_SWEETEDITOR {
   }
 
   U8String EditorOptions::dump() const {
-    return "EditorOptions {touch_slop = " + std::to_string(touch_slop) + ", double_tap_timeout = " + std::to_string(double_tap_timeout) + ", long_press_ms = " + std::to_string(long_press_ms) + ", fling_friction = " + std::to_string(fling_friction) + ", fling_min_velocity = " + std::to_string(fling_min_velocity) + ", fling_max_velocity = " + std::to_string(fling_max_velocity) + ", max_undo_stack_size = " + std::to_string(max_undo_stack_size) + "}";
+    return "EditorOptions {touch_slop = " + std::to_string(touch_slop) + ", double_tap_timeout = " + std::to_string(double_tap_timeout) + ", long_press_ms = " + std::to_string(long_press_ms) + ", fling_friction = " + std::to_string(fling_friction) + ", fling_min_velocity = " + std::to_string(fling_min_velocity) + ", fling_max_velocity = " + std::to_string(fling_max_velocity) + ", max_undo_stack_size = " + std::to_string(max_undo_stack_size) + ", key_chord_timeout_ms = " + std::to_string(key_chord_timeout_ms) + "}";
   }
 
   U8String EditorSettings::dump() const {
@@ -66,13 +66,14 @@ namespace NS_SWEETEDITOR {
         + ", wrap_mode = " + std::to_string(static_cast<int>(wrap_mode))
         + "}";
   }
-  EditorCore::EditorCore(const Ptr<TextMeasurer>& measurer, const EditorOptions& options): m_measurer_(measurer), m_options_(options) {
+  EditorCore::EditorCore(const Ptr<TextMeasurer>& measurer, const EditorOptions& options): m_measurer_(measurer), m_options_(options), m_key_resolver_(options.key_chord_timeout_ms) {
     m_decorations_ = makePtr<DecorationManager>();
     m_gesture_handler_ = makeUPtr<GestureHandler>(options.simpleAsTouchConfig());
     m_text_layout_ = makeUPtr<TextLayout>(measurer, m_decorations_);
     m_undo_manager_ = makeUPtr<UndoManager>(options.max_undo_stack_size);
     TouchConfig tc = options.simpleAsTouchConfig();
 m_fling_ = makeUPtr<FlingAnimator>(tc);
+    m_key_resolver_.setKeyMap(KeyMap::createDefault());
     loadDocument(makePtr<LineArrayDocument>(""));
     LOGD("EditorCore::EditorCore(), options = %s", options.dump().c_str());
   }
@@ -776,7 +777,7 @@ m_fling_ = makeUPtr<FlingAnimator>(tc);
 
     switch (result.type) {
     case GestureType::TAP:
-      if (static_cast<uint8_t>(result.modifiers & Modifier::SHIFT) && m_has_selection_) {
+    if (static_cast<uint8_t>(result.modifiers & KeyModifier::SHIFT) && m_has_selection_) {
         // Shift+Click from mouse should not apply touch y-offset
         bool is_mouse_tap = (event.type == EventType::MOUSE_DOWN);
         dragSelectTo(result.tap_point, is_mouse_tap);
@@ -941,50 +942,10 @@ m_fling_ = makeUPtr<FlingAnimator>(tc);
       }
     }
 
-    bool shift = static_cast<uint8_t>(event.modifiers & Modifier::SHIFT) != 0;
-    bool ctrl = static_cast<uint8_t>(event.modifiers & Modifier::CTRL) != 0;
-    bool meta = static_cast<uint8_t>(event.modifiers & Modifier::META) != 0;
-    bool alt = static_cast<uint8_t>(event.modifiers & Modifier::ALT) != 0;
-    bool cmd = ctrl || meta;
-
-    switch (event.key_code) {
-    case KeyCode::BACKSPACE:
-      result.edit_result = backspace();
-      result.handled = true;
-      result.cursor_changed = true;
-      result.content_changed = result.edit_result.changed;
-      break;
-    case KeyCode::DELETE_KEY:
-      result.edit_result = deleteForward();
-      result.handled = true;
-      result.cursor_changed = true;
-      result.content_changed = result.edit_result.changed;
-      break;
-    case KeyCode::ENTER:
-      if (cmd && shift) {
-        result.edit_result = insertLineAbove();
-        result.handled = true;
-        result.cursor_changed = true;
-        result.content_changed = result.edit_result.changed;
-      } else if (cmd) {
-        result.edit_result = insertLineBelow();
-        result.handled = true;
-        result.cursor_changed = true;
-        result.content_changed = result.edit_result.changed;
-      } else if (m_linked_editing_session_ && m_linked_editing_session_->isActive()) {
-        // Enter finishes linked editing, confirms current text, and moves cursor to $0
-        finishLinkedEditing();
-        result.handled = true;
-        result.cursor_changed = true;
-      } else {
-        result.edit_result = insertText("\n");
-        result.handled = true;
-        result.cursor_changed = true;
-        result.content_changed = result.edit_result.changed;
-      }
-      break;
-    case KeyCode::TAB:
-      if (m_linked_editing_session_ && m_linked_editing_session_->isActive()) {
+    // Linked editing overrides for Tab/Shift+Tab/Enter/Escape
+    if (m_linked_editing_session_ && m_linked_editing_session_->isActive()) {
+      bool shift = static_cast<uint8_t>(event.modifiers & KeyModifier::SHIFT) != 0;
+      if (event.key_code == KeyCode::TAB) {
         if (shift) {
           linkedEditingPrevTabStop();
         } else {
@@ -993,123 +954,224 @@ m_fling_ = makeUPtr<FlingAnimator>(tc);
         result.handled = true;
         result.cursor_changed = true;
         result.selection_changed = true;
-      } else {
+        return result;
+      }
+      if (event.key_code == KeyCode::ENTER) {
+        finishLinkedEditing();
+        result.handled = true;
+        result.cursor_changed = true;
+        return result;
+      }
+      if (event.key_code == KeyCode::ESCAPE) {
+        cancelLinkedEditing();
+        result.handled = true;
+        return result;
+      }
+    }
+
+    // Resolve key chord through KeyMap
+    KeyChord chord {event.modifiers, event.key_code};
+    ResolveResult resolve = m_key_resolver_.resolve(chord);
+
+    if (resolve.status == ResolveStatus::PENDING) {
+      result.handled = true;
+      return result;
+    }
+
+    if (resolve.status == ResolveStatus::MATCHED) {
+      EditorCommand cmd = resolve.command;
+      result.command = cmd;
+
+      // Platform-handled commands: mark but don't execute
+      if (cmd == EditorCommand::COPY || cmd == EditorCommand::PASTE || cmd == EditorCommand::CUT) {
+        result.handled = true;
+        return result;
+      }
+
+      switch (cmd) {
+      case EditorCommand::CURSOR_LEFT:
+        moveCursorLeft(false);
+        result.handled = true;
+        result.cursor_changed = true;
+        break;
+      case EditorCommand::CURSOR_RIGHT:
+        moveCursorRight(false);
+        result.handled = true;
+        result.cursor_changed = true;
+        break;
+      case EditorCommand::CURSOR_UP:
+        moveCursorUp(false);
+        result.handled = true;
+        result.cursor_changed = true;
+        break;
+      case EditorCommand::CURSOR_DOWN:
+        moveCursorDown(false);
+        result.handled = true;
+        result.cursor_changed = true;
+        break;
+      case EditorCommand::CURSOR_LINE_START:
+        moveCursorToLineStart(false);
+        result.handled = true;
+        result.cursor_changed = true;
+        break;
+      case EditorCommand::CURSOR_LINE_END:
+        moveCursorToLineEnd(false);
+        result.handled = true;
+        result.cursor_changed = true;
+        break;
+      case EditorCommand::CURSOR_PAGE_UP:
+        moveCursorPageUp(false);
+        result.handled = true;
+        result.cursor_changed = true;
+        break;
+      case EditorCommand::CURSOR_PAGE_DOWN:
+        moveCursorPageDown(false);
+        result.handled = true;
+        result.cursor_changed = true;
+        break;
+      case EditorCommand::SELECT_LEFT:
+        moveCursorLeft(true);
+        result.handled = true;
+        result.cursor_changed = true;
+        result.selection_changed = true;
+        break;
+      case EditorCommand::SELECT_RIGHT:
+        moveCursorRight(true);
+        result.handled = true;
+        result.cursor_changed = true;
+        result.selection_changed = true;
+        break;
+      case EditorCommand::SELECT_UP:
+        moveCursorUp(true);
+        result.handled = true;
+        result.cursor_changed = true;
+        result.selection_changed = true;
+        break;
+      case EditorCommand::SELECT_DOWN:
+        moveCursorDown(true);
+        result.handled = true;
+        result.cursor_changed = true;
+        result.selection_changed = true;
+        break;
+      case EditorCommand::SELECT_LINE_START:
+        moveCursorToLineStart(true);
+        result.handled = true;
+        result.cursor_changed = true;
+        result.selection_changed = true;
+        break;
+      case EditorCommand::SELECT_LINE_END:
+        moveCursorToLineEnd(true);
+        result.handled = true;
+        result.cursor_changed = true;
+        result.selection_changed = true;
+        break;
+      case EditorCommand::SELECT_PAGE_UP:
+        moveCursorPageUp(true);
+        result.handled = true;
+        result.cursor_changed = true;
+        result.selection_changed = true;
+        break;
+      case EditorCommand::SELECT_PAGE_DOWN:
+        moveCursorPageDown(true);
+        result.handled = true;
+        result.cursor_changed = true;
+        result.selection_changed = true;
+        break;
+      case EditorCommand::SELECT_ALL:
+        selectAll();
+        result.handled = true;
+        result.selection_changed = true;
+        break;
+      case EditorCommand::BACKSPACE:
+        result.edit_result = backspace();
+        result.handled = true;
+        result.cursor_changed = true;
+        result.content_changed = result.edit_result.changed;
+        break;
+      case EditorCommand::DELETE_FORWARD:
+        result.edit_result = deleteForward();
+        result.handled = true;
+        result.cursor_changed = true;
+        result.content_changed = result.edit_result.changed;
+        break;
+      case EditorCommand::INSERT_TAB:
         result.edit_result = insertText("\t");
         result.handled = true;
         result.cursor_changed = true;
         result.content_changed = result.edit_result.changed;
-      }
-      break;
-    case KeyCode::ESCAPE:
-      if (m_linked_editing_session_ && m_linked_editing_session_->isActive()) {
-        cancelLinkedEditing();
-        result.handled = true;
-      }
-      break;
-    case KeyCode::LEFT:
-      moveCursorLeft(shift);
-      result.handled = true;
-      result.cursor_changed = true;
-      result.selection_changed = shift;
-      break;
-    case KeyCode::RIGHT:
-      moveCursorRight(shift);
-      result.handled = true;
-      result.cursor_changed = true;
-      result.selection_changed = shift;
-      break;
-    case KeyCode::UP:
-      if (alt && shift) {
-        result.edit_result = copyLineUp();
+        break;
+      case EditorCommand::INSERT_NEWLINE:
+        result.edit_result = insertText("\n");
         result.handled = true;
         result.cursor_changed = true;
         result.content_changed = result.edit_result.changed;
-      } else if (alt) {
-        result.edit_result = moveLineUp();
+        break;
+      case EditorCommand::INSERT_LINE_ABOVE:
+        result.edit_result = insertLineAbove();
         result.handled = true;
         result.cursor_changed = true;
         result.content_changed = result.edit_result.changed;
-      } else {
-        moveCursorUp(shift);
-        result.handled = true;
-        result.cursor_changed = true;
-        result.selection_changed = shift;
-      }
-      break;
-    case KeyCode::DOWN:
-      if (alt && shift) {
-        result.edit_result = copyLineDown();
+        break;
+      case EditorCommand::INSERT_LINE_BELOW:
+        result.edit_result = insertLineBelow();
         result.handled = true;
         result.cursor_changed = true;
         result.content_changed = result.edit_result.changed;
-      } else if (alt) {
-        result.edit_result = moveLineDown();
-        result.handled = true;
-        result.cursor_changed = true;
-        result.content_changed = result.edit_result.changed;
-      } else {
-        moveCursorDown(shift);
-        result.handled = true;
-        result.cursor_changed = true;
-        result.selection_changed = shift;
-      }
-      break;
-    case KeyCode::HOME:
-      moveCursorToLineStart(shift);
-      result.handled = true;
-      result.cursor_changed = true;
-      result.selection_changed = shift;
-      break;
-    case KeyCode::END:
-      moveCursorToLineEnd(shift);
-      result.handled = true;
-      result.cursor_changed = true;
-      result.selection_changed = shift;
-      break;
-    case KeyCode::A:
-      if (cmd) {
-        selectAll();
-        result.handled = true;
-        result.selection_changed = true;
-      }
-      break;
-    case KeyCode::Z:
-      if (cmd && shift) {
-        result.edit_result = redo();
-        if (result.edit_result.changed) {
-          result.handled = true;
-          result.content_changed = true;
-          result.cursor_changed = true;
-        }
-      } else if (cmd) {
+        break;
+      case EditorCommand::UNDO:
         result.edit_result = undo();
         if (result.edit_result.changed) {
           result.handled = true;
           result.content_changed = true;
           result.cursor_changed = true;
         }
-      }
-      break;
-    case KeyCode::Y:
-      if (cmd) {
+        break;
+      case EditorCommand::REDO:
         result.edit_result = redo();
         if (result.edit_result.changed) {
           result.handled = true;
           result.content_changed = true;
           result.cursor_changed = true;
         }
-      }
-      break;
-    case KeyCode::K:
-      if (cmd && shift) {
+        break;
+      case EditorCommand::MOVE_LINE_UP:
+        result.edit_result = moveLineUp();
+        result.handled = true;
+        result.cursor_changed = true;
+        result.content_changed = result.edit_result.changed;
+        break;
+      case EditorCommand::MOVE_LINE_DOWN:
+        result.edit_result = moveLineDown();
+        result.handled = true;
+        result.cursor_changed = true;
+        result.content_changed = result.edit_result.changed;
+        break;
+      case EditorCommand::COPY_LINE_UP:
+        result.edit_result = copyLineUp();
+        result.handled = true;
+        result.cursor_changed = true;
+        result.content_changed = result.edit_result.changed;
+        break;
+      case EditorCommand::COPY_LINE_DOWN:
+        result.edit_result = copyLineDown();
+        result.handled = true;
+        result.cursor_changed = true;
+        result.content_changed = result.edit_result.changed;
+        break;
+      case EditorCommand::DELETE_LINE:
         result.edit_result = deleteLine();
         result.handled = true;
         result.cursor_changed = true;
         result.content_changed = result.edit_result.changed;
+        break;
+      default:
+        break;
       }
-      break;
-    default:
-      break;
+
+      if (result.handled) {
+        LOGD("EditorCore::handleKeyEvent, key_code = %d, command = %d, handled = %d", (int)event.key_code, (int)cmd, result.handled);
+        return result;
+      }
     }
 
     // Handle plain text input (direct character input when not in IME composition)
@@ -1122,6 +1184,10 @@ m_fling_ = makeUPtr<FlingAnimator>(tc);
 
     LOGD("EditorCore::handleKeyEvent, key_code = %d, handled = %d", (int)event.key_code, result.handled);
     return result;
+  }
+
+  void EditorCore::setKeyMap(KeyMap key_map) {
+    m_key_resolver_.setKeyMap(std::move(key_map));
   }
 
 #pragma endregion
@@ -2026,6 +2092,29 @@ m_fling_ = makeUPtr<FlingAnimator>(tc);
     uint32_t cols = m_document_->getLineColumns(m_cursor_position_.line);
     moveCursorTo({m_cursor_position_.line, cols}, extend_selection);
   }
+
+  void EditorCore::moveCursorPageUp(bool extend_selection) {
+    if (m_document_ == nullptr || m_text_layout_ == nullptr) return;
+    float line_height = m_text_layout_->getLineHeight();
+    if (line_height <= 0) return;
+    int page_lines = static_cast<int>(m_viewport_.height / line_height);
+    if (page_lines < 1) page_lines = 1;
+    for (int i = 0; i < page_lines; ++i) {
+      moveCursorUp(extend_selection);
+    }
+  }
+
+  void EditorCore::moveCursorPageDown(bool extend_selection) {
+    if (m_document_ == nullptr || m_text_layout_ == nullptr) return;
+    float line_height = m_text_layout_->getLineHeight();
+    if (line_height <= 0) return;
+    int page_lines = static_cast<int>(m_viewport_.height / line_height);
+    if (page_lines < 1) page_lines = 1;
+    for (int i = 0; i < page_lines; ++i) {
+      moveCursorDown(extend_selection);
+    }
+  }
+
   void EditorCore::compositionStart() {
     if (m_document_ == nullptr || m_settings_.read_only) return;
 

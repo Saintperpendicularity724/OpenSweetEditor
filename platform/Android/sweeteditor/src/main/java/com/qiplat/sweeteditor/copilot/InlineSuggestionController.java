@@ -134,7 +134,7 @@ public class InlineSuggestionController implements InlineSuggestionActionBar.Act
 
     /**
      * Handle Android key codes. Returns true if consumed.
-     * KEYCODE_TAB(61) → accept, KEYCODE_ESCAPE(111) → dismiss.
+     * KEYCODE_TAB → accept, KEYCODE_ESCAPE → dismiss.
      */
     public boolean handleAndroidKeyCode(int androidKeyCode) {
         if (!isShowing()) return false;

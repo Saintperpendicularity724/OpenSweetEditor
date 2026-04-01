@@ -32,6 +32,10 @@ import com.qiplat.sweeteditor.core.Document;
 import com.qiplat.sweeteditor.core.EditorOptions;
 import com.qiplat.sweeteditor.core.EditorCore;
 import com.qiplat.sweeteditor.core.ScrollbarConfig;
+import com.qiplat.sweeteditor.core.keymap.EditorCommand;
+import com.qiplat.sweeteditor.core.keymap.KeyBinding;
+import com.qiplat.sweeteditor.core.keymap.KeyCode;
+import com.qiplat.sweeteditor.core.keymap.KeyModifier;
 import com.qiplat.sweeteditor.core.adornment.DiagnosticItem;
 import com.qiplat.sweeteditor.core.adornment.FoldRegion;
 
@@ -118,6 +122,7 @@ public class SweetEditor extends View {
 
     private EditorCore mEditorCore;
     private EditorSettings mSettings;
+    private EditorKeyMap mKeyMap;
     private TextMeasurer mTextMeasurer;
     private Document mDocument;
     private final EditorEventBus mEventBus = new EditorEventBus();
@@ -378,6 +383,19 @@ public class SweetEditor extends View {
     @NonNull
     public EditorSettings getSettings() {
         return mSettings;
+    }
+
+    @NonNull
+    public EditorKeyMap getKeyMap() {
+        return mKeyMap;
+    }
+
+    /**
+     * Replace the current key map and sync all bindings to the C++ core.
+     */
+    public void setKeyMap(@NonNull EditorKeyMap keyMap) {
+        mKeyMap = keyMap;
+        mEditorCore.setKeyMap(keyMap);
     }
 
     void syncPlatformScale(float scale) {
@@ -1719,20 +1737,17 @@ public class SweetEditor extends View {
                 return;
             }
         }
-        // First check for Ctrl shortcut keys (SelectAll/Copy/Paste/Cut/Undo/Redo)
-        if (event.isCtrlPressed()) {
-            if (handleCtrlShortcut(event)) {
-                resetCursorBlink();
-                flush();
-                logInputPerf(t0, "key-ctrl");
-                return;
+        int nativeKeyCode = mapAndroidKeyCode(event.getKeyCode());
+        if (nativeKeyCode == KeyCode.NONE && (event.isCtrlPressed() || event.isMetaPressed() || event.isAltPressed())) {
+            int unicode = event.getUnicodeChar(0);
+            if (unicode >= 'a' && unicode <= 'z') {
+                nativeKeyCode = unicode - 32;
             }
         }
-        int nativeKeyCode = mapAndroidKeyCode(event.getKeyCode());
-        if (nativeKeyCode != 0) {
+        if (nativeKeyCode != KeyCode.NONE) {
             // Give priority to NewLineActionProvider to handle Enter (Provider decides indentation),
             // if no Provider or returns null, fallback to Core layer default behavior
-            if (nativeKeyCode == 13 && mNewLineActionProviderManager != null) {
+            if (nativeKeyCode == KeyCode.ENTER && mNewLineActionProviderManager != null) {
                 NewLineAction action = mNewLineActionProviderManager.provideNewLineAction();
                 if (action != null) {
                     EditorCore.TextEditResult editResult = mEditorCore.insertText(action.text);
@@ -1743,12 +1758,18 @@ public class SweetEditor extends View {
                     return;
                 }
             }
-            int modifiers = 0;
-            if (event.isShiftPressed()) modifiers |= 1;
-            if (event.isCtrlPressed()) modifiers |= 2;
-            if (event.isAltPressed()) modifiers |= 4;
-            if (event.isMetaPressed()) modifiers |= 8;
+            int modifiers = KeyModifier.NONE;
+            if (event.isShiftPressed()) modifiers |= KeyModifier.SHIFT;
+            if (event.isCtrlPressed()) modifiers |= KeyModifier.CTRL;
+            if (event.isAltPressed()) modifiers |= KeyModifier.ALT;
+            if (event.isMetaPressed()) modifiers |= KeyModifier.META;
             EditorCore.KeyEventResult result = mEditorCore.handleKeyEvent(nativeKeyCode, null, modifiers);
+            if (result.handled && dispatchKeyMapCommand(result.command, nativeKeyCode, modifiers)) {
+                resetCursorBlink();
+                flush();
+                logInputPerf(t0, "key-cmd");
+                return;
+            }
             dispatchKeyEventResult(result);
             resetCursorBlink();
             flush();
@@ -1765,37 +1786,17 @@ public class SweetEditor extends View {
         mRenderer.getPerfOverlay().recordInput(tag, ms);
     }
 
-    private boolean handleCtrlShortcut(KeyEvent event) {
-        switch (event.getKeyCode()) {
-            case KeyEvent.KEYCODE_A:
-                selectAll();
-                return true;
-            case KeyEvent.KEYCODE_C:
-                copyToClipboard();
-                return true;
-            case KeyEvent.KEYCODE_V:
-                pasteFromClipboard();
-                return true;
-            case KeyEvent.KEYCODE_X:
-                cutToClipboard();
-                return true;
-            case KeyEvent.KEYCODE_Z:
-                if (event.isShiftPressed()) {
-                    redo();
-                } else {
-                    undo();
-                }
-                return true;
-            case KeyEvent.KEYCODE_Y:
-                redo();
-                return true;
-            case KeyEvent.KEYCODE_SPACE:
-                // Ctrl+Space to manually trigger completion
-                triggerCompletion();
-                return true;
-            default:
-                return false;
-        }
+    private boolean dispatchKeyMapCommand(int command, int keyCode, int modifiers) {
+        if (mKeyMap == null) return false;
+        EditorCommand<SweetEditor> handler = mKeyMap.getCommand(command);
+        if (handler == null) return false;
+        KeyBinding binding = new KeyBinding(modifiers, keyCode, command);
+        handler.onShortCut(binding, this);
+        return true;
+    }
+
+    private EditorKeyMap createDefaultKeyMap() {
+        return EditorKeyMap.defaultKeyMap();
     }
 
     // ==================== Private Helper / Internal Implementation ====================
@@ -1841,6 +1842,7 @@ public class SweetEditor extends View {
         mEditorCore.registerBatchTextStyles(mTheme.textStyles);
 
         mSettings = new EditorSettings(this);
+        mKeyMap = createDefaultKeyMap();
         mSettings.setContentStartPadding(DEFAULT_CONTENT_START_PADDING_DP * density);
         mSettings.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.NORMAL));
         mSettings.setGutterSticky(false);
@@ -1919,34 +1921,21 @@ public class SweetEditor extends View {
 
     private static int mapAndroidKeyCode(int androidKeyCode) {
         switch (androidKeyCode) {
-            case KeyEvent.KEYCODE_DEL:
-                return 8;           // BACKSPACE
-            case KeyEvent.KEYCODE_TAB:
-                return 9;
-            case KeyEvent.KEYCODE_ENTER:
-                return 13;
-            case KeyEvent.KEYCODE_ESCAPE:
-                return 27;
-            case KeyEvent.KEYCODE_FORWARD_DEL:
-                return 46;  // DELETE
-            case KeyEvent.KEYCODE_DPAD_LEFT:
-                return 37;
-            case KeyEvent.KEYCODE_DPAD_UP:
-                return 38;
-            case KeyEvent.KEYCODE_DPAD_RIGHT:
-                return 39;
-            case KeyEvent.KEYCODE_DPAD_DOWN:
-                return 40;
-            case KeyEvent.KEYCODE_MOVE_HOME:
-                return 36;
-            case KeyEvent.KEYCODE_MOVE_END:
-                return 35;
-            case KeyEvent.KEYCODE_PAGE_UP:
-                return 33;
-            case KeyEvent.KEYCODE_PAGE_DOWN:
-                return 34;
-            default:
-                return 0;
+            case KeyEvent.KEYCODE_DEL:         return KeyCode.BACKSPACE;
+            case KeyEvent.KEYCODE_TAB:         return KeyCode.TAB;
+            case KeyEvent.KEYCODE_ENTER:       return KeyCode.ENTER;
+            case KeyEvent.KEYCODE_ESCAPE:      return KeyCode.ESCAPE;
+            case KeyEvent.KEYCODE_FORWARD_DEL: return KeyCode.DELETE_KEY;
+            case KeyEvent.KEYCODE_DPAD_LEFT:   return KeyCode.LEFT;
+            case KeyEvent.KEYCODE_DPAD_UP:     return KeyCode.UP;
+            case KeyEvent.KEYCODE_DPAD_RIGHT:  return KeyCode.RIGHT;
+            case KeyEvent.KEYCODE_DPAD_DOWN:   return KeyCode.DOWN;
+            case KeyEvent.KEYCODE_MOVE_HOME:   return KeyCode.HOME;
+            case KeyEvent.KEYCODE_MOVE_END:    return KeyCode.END;
+            case KeyEvent.KEYCODE_PAGE_UP:     return KeyCode.PAGE_UP;
+            case KeyEvent.KEYCODE_PAGE_DOWN:   return KeyCode.PAGE_DOWN;
+            case KeyEvent.KEYCODE_SPACE:        return KeyCode.SPACE;
+            default:                           return KeyCode.NONE;
         }
     }
 }

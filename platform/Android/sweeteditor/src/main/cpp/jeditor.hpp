@@ -193,8 +193,11 @@ public:
         std::memcpy(&editor_options.fling_min_velocity, data_ptr + offset, sizeof(float)); offset += sizeof(float);
         std::memcpy(&editor_options.fling_max_velocity, data_ptr + offset, sizeof(float)); offset += sizeof(float);
         uint64_t max_undo = 0;
-        std::memcpy(&max_undo, data_ptr + offset, sizeof(uint64_t));
+        std::memcpy(&max_undo, data_ptr + offset, sizeof(uint64_t)); offset += sizeof(uint64_t);
         editor_options.max_undo_stack_size = static_cast<size_t>(max_undo);
+        if (offset + sizeof(int64_t) <= static_cast<size_t>(options_size)) {
+          std::memcpy(&editor_options.key_chord_timeout_ms, data_ptr + offset, sizeof(int64_t));
+        }
       }
     }
     Ptr<TextMeasurer> native_measurer = makePtr<AndroidTextMeasurer>(env, measurer);
@@ -276,6 +279,14 @@ public:
       env->ReleaseStringUTFChars(text, text_str);
     }
     return wrapBinaryPayload(env, payload, out_size);
+  }
+
+  static void setKeyMap(JNIEnv* env, jclass clazz, jlong handle, jobject buffer) {
+    if (handle == 0 || buffer == nullptr) return;
+    auto* data = static_cast<const uint8_t*>(env->GetDirectBufferAddress(buffer));
+    jlong capacity = env->GetDirectBufferCapacity(buffer);
+    if (data == nullptr || capacity <= 0) return;
+    editor_set_keymap(static_cast<intptr_t>(handle), data, static_cast<size_t>(capacity));
   }
 
   static jobject insertText(JNIEnv* env, jclass clazz, jlong handle, jstring text) {
@@ -867,6 +878,7 @@ public:
       {"nativeOnFontMetricsChanged", "(J)V", (void*) onFontMetricsChanged},
       {"nativeBuildRenderModel", "(J)Ljava/nio/ByteBuffer;", (void*) buildRenderModel},
       {"nativeHandleKeyEvent", "(JILjava/lang/String;I)Ljava/nio/ByteBuffer;", (void*) handleKeyEvent},
+      {"nativeSetKeyMap", "(JLjava/nio/ByteBuffer;)V", (void*) setKeyMap},
       {"nativeInsertText", "(JLjava/lang/String;)Ljava/nio/ByteBuffer;", (void*) insertText},
       {"nativeReplaceText", "(JIIIILjava/lang/String;)Ljava/nio/ByteBuffer;", (void*) replaceText},
       {"nativeDeleteText", "(JIIII)Ljava/nio/ByteBuffer;", (void*) deleteText},

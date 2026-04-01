@@ -8,6 +8,7 @@ import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.text.TextUtils;
 import android.os.Build;
+import android.view.KeyEvent;
 import android.view.WindowInsets;
 import android.view.Gravity;
 import android.view.View;
@@ -122,21 +123,21 @@ public class CompletionPopupController implements CompletionProviderManager.Comp
     }
 
     /**
-     * Handle Android KeyEvent keyCode (KEYCODE_ENTER=66, etc.).
+     * Handle Android KeyEvent keyCode for completion panel navigation.
      */
     public boolean handleAndroidKeyCode(int androidKeyCode) {
         if (!isShowing() || items.isEmpty()) return false;
         switch (androidKeyCode) {
-            case 66: // KEYCODE_ENTER
+            case KeyEvent.KEYCODE_ENTER:
                 confirmSelected();
                 return true;
-            case 111: // KEYCODE_ESCAPE
+            case KeyEvent.KEYCODE_ESCAPE:
                 dismiss();
                 return true;
-            case 19: // KEYCODE_DPAD_UP
+            case KeyEvent.KEYCODE_DPAD_UP:
                 moveSelection(-1);
                 return true;
-            case 20: // KEYCODE_DPAD_DOWN
+            case KeyEvent.KEYCODE_DPAD_DOWN:
                 moveSelection(1);
                 return true;
             default:

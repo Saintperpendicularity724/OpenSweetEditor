@@ -115,7 +115,7 @@ namespace NS_SWEETEDITOR {
     /// Pointer coordinates
     Vector<PointF> points;
     /// Modifier key state (Shift/Ctrl/Alt/Meta bitmask)
-    Modifier modifiers {Modifier::NONE};
+    KeyModifier modifiers {KeyModifier::NONE};
     /// Wheel delta for MOUSE_WHEEL (positive: up/right, negative: down/left)
     float wheel_delta_x {0};
     float wheel_delta_y {0};
@@ -123,7 +123,7 @@ namespace NS_SWEETEDITOR {
     float direct_scale {1};
 
     static GestureEvent create(EventType type, uint8_t pointer_count, const float* points);
-    static GestureEvent createWithModifiers(EventType type, uint8_t pointer_count, const float* points, Modifier modifiers);
+    static GestureEvent createWithModifiers(EventType type, uint8_t pointer_count, const float* points, KeyModifier modifiers);
     U8String dump() const;
   };
 
@@ -188,7 +188,7 @@ namespace NS_SWEETEDITOR {
     float scroll_x {0};
     float scroll_y {0};
     /// Modifier key state (returned to upper layer, used for Shift+Click, etc.)
-    Modifier modifiers {Modifier::NONE};
+    KeyModifier modifiers {KeyModifier::NONE};
     /// Cursor position (filled by EditorCore)
     TextPosition cursor_position;
     /// Whether there is a selection (filled by EditorCore)
@@ -247,7 +247,7 @@ namespace NS_SWEETEDITOR {
     Vector<PointF> m_last_multi_points_;
     PointF m_last_tap_point_;
     int64_t m_last_tap_time_ {0};
-    Modifier m_active_modifiers_ {Modifier::NONE};
+    KeyModifier m_active_modifiers_ {KeyModifier::NONE};
   };
 
   NLOHMANN_JSON_SERIALIZE_ENUM(EventType, {

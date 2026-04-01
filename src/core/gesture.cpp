@@ -11,10 +11,10 @@ namespace NS_SWEETEDITOR {
 
 #pragma region [Class: GestureEvent]
   GestureEvent GestureEvent::create(EventType type, const uint8_t pointer_count, const float* points) {
-    return createWithModifiers(type, pointer_count, points, Modifier::NONE);
+    return createWithModifiers(type, pointer_count, points, KeyModifier::NONE);
   }
 
-  GestureEvent GestureEvent::createWithModifiers(EventType type, const uint8_t pointer_count, const float* points, Modifier modifiers) {
+  GestureEvent GestureEvent::createWithModifiers(EventType type, const uint8_t pointer_count, const float* points, KeyModifier modifiers) {
     GestureEvent event;
     event.type = type;
     event.modifiers = modifiers;
@@ -45,7 +45,7 @@ namespace NS_SWEETEDITOR {
     m_last_multi_points_.clear();
     m_down_points_.clear();
     m_down_time_ = std::numeric_limits<int64_t>::max();
-    m_active_modifiers_ = Modifier::NONE;
+    m_active_modifiers_ = KeyModifier::NONE;
   }
 
   GestureResult GestureHandler::handleGestureEvent(const GestureEvent& event) {
@@ -108,14 +108,14 @@ namespace NS_SWEETEDITOR {
     // Mouse wheel
     case EventType::MOUSE_WHEEL: {
       // Ctrl + wheel = zoom
-      if (static_cast<uint8_t>(event.modifiers & Modifier::CTRL)) {
+      if (static_cast<uint8_t>(event.modifiers & KeyModifier::CTRL)) {
         float scale = event.wheel_delta_y > 0 ? 1.1f : 0.9f;
         return {GestureType::SCALE, {}, scale, 0, 0, m_active_modifiers_};
       }
       // Normal wheel = scroll (Shift + wheel = horizontal scroll)
       float sx = event.wheel_delta_x;
       float sy = event.wheel_delta_y;
-      if (static_cast<uint8_t>(event.modifiers & Modifier::SHIFT)) {
+      if (static_cast<uint8_t>(event.modifiers & KeyModifier::SHIFT)) {
         sx = sy;
         sy = 0;
       }
