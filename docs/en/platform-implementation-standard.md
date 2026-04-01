@@ -27,6 +27,7 @@ The Core layer does not involve UI rendering. It contains only bridging, data mo
 | **Adornment** | `StyleSpan`, `SpanLayer`, `InlayHint`, `InlayType`, `PhantomText`, `FoldRegion`, `GutterIcon`, `DiagnosticItem`, `IndentGuide`, `BracketGuide`, `FlowGuide`, `SeparatorGuide`, `SeparatorStyle`, `TextStyle` | Decoration data types |
 | **Visual** | `EditorRenderModel`, `VisualLine`, `VisualRun`, `VisualRunType`, `Cursor`, `CursorRect`, `SelectionRect`, `SelectionHandle`, `ScrollMetrics`, `ScrollbarModel`, `ScrollbarRect`, `GuideSegment`, `GuideType`, `GuideDirection`, `GuideStyle`, `DiagnosticDecoration`, `CompositionDecoration`, `FoldMarkerRenderItem`, `FoldState`, `GutterIconRenderItem`, `LinkedEditingRect`, `BracketHighlightRect`, `PointF` | Render model types |
 | **Snippet** | `LinkedEditingModel`, `TabStopGroup` | Linked editing / tab stop groups |
+| **Keymap** | `KeyMap`, `KeyBinding`, `KeyChord`, `KeyCode`, `KeyModifier`, `EditorCommand` | Shortcut mapping data types and command identifiers |
 
 ### 1.2 Widget Layer (UI Controls / Rendering / Interaction)
 
@@ -39,6 +40,7 @@ The Widget layer handles platform-native rendering, user interaction, and extens
 | **Completion** | `CompletionProvider`, `CompletionProviderManager`, `CompletionContext`, `CompletionItem`, `CompletionResult`; if the Receiver callback pattern is used, `CompletionReceiver` is the recommended name | Completion provider system |
 | **Event** | A type-safe event mechanism, `EditorEvent`, `TextChangedEvent`, `CursorChangedEvent`, `SelectionChangedEvent`, `ScrollChangedEvent`, `ScaleChangedEvent`, `DocumentLoadedEvent`, `FoldToggleEvent`, `GutterIconClickEvent`, `InlayHintClickEvent`, `LongPressEvent`*(mobile only)*, `DoubleTapEvent`, `ContextMenuEvent`*(desktop & cross-platform UI frameworks)*; if an explicit event-bus/listener pattern is used, `EditorEventBus` and `EditorEventListener` are the recommended names | Event system |
 | **NewLine** | `NewLineActionProvider`, `NewLineActionProviderManager`, `NewLineAction`, `NewLineContext` | Newline action provider system |
+| **Keymap** | `EditorKeyMap` | Widget-layer keymap extension that binds command ids to host-side handlers |
 | **Copilot** *(SHOULD)* | `InlineSuggestion`, `InlineSuggestionListener` or an equivalent host-visible accept/dismiss callback mechanism; MAY: `InlineSuggestionController` | Inline suggestion data + callback; listener shape is the primary path when exposed |
 | **Selection** *(MAY, mobile-only)* | `SelectionMenuController`, `SelectionMenuItem`, `SelectionMenuItemProvider`, a host-visible custom-item click callback mechanism; MAY: `SelectionMenuListener` | Selection menu (MAY omit on desktop) |
 | **Perf** *(SHOULD)* | `PerfOverlay`, `MeasurePerfStats`, `PerfStepRecorder` | Performance overlay |
@@ -90,6 +92,13 @@ Other public types:
 | `DecorationReceiver` | C#/TS/Kotlin: `IDecorationReceiver`; OC: `SEDecorationReceiver` | Callback interface; only applicable when the platform exposes an explicit Receiver type |
 | `CompletionReceiver` | C#/TS/Kotlin: `ICompletionReceiver`; OC: `SECompletionReceiver` | Callback interface; only applicable when the platform exposes an explicit Receiver type |
 | `NewLineActionProvider` | C#/TS/Kotlin: `INewLineActionProvider`; OC: `SENewLineActionProvider` | Provider interface |
+| `KeyMap` | OC: `SEKeyMap` | Core keymap data container |
+| `EditorKeyMap` | OC: `SEEditorKeyMap` | Widget-layer keymap extension |
+| `EditorCommand` | OC: `SEEditorCommand` | Built-in command ids / command-handler concept type |
+| `KeyBinding` | OC: `SEKeyBinding` | One- or two-chord binding entry |
+| `KeyChord` | OC: `SEKeyChord` | Single key-chord value type |
+| `KeyCode` | OC: `SEKeyCode` | Keyboard key code constants / enum |
+| `KeyModifier` | OC: `SEKeyModifier` | Keyboard modifier flags / enum |
 | `EditorMetadata` | C#/TS/Kotlin: `IEditorMetadata`; OC: `SEEditorMetadata` | Metadata concept type; only applicable when the platform exposes an explicit public type |
 | `EditorEventListener` | C#/TS/Kotlin: `IEditorEventListener`; OC: `SEEditorEventListener` | Listener interface; applies only when the platform exposes an explicit listener-interface pattern |
 | `InlineSuggestionListener` | C#/TS/Kotlin: `IInlineSuggestionListener`; OC: `SEInlineSuggestionListener` | Listener interface; only applicable when the platform exposes an explicit inline-suggestion listener |
@@ -104,7 +113,7 @@ Other public types:
 > - Languages whose convention requires a project prefix on class names (e.g. Objective-C) MAY use the `SE` prefix variant (abbreviation of SweetEditor)
 > - All other languages SHOULD use the canonical name directly
 
-> If the event system uses platform-native `event` / delegate / stream / signal APIs, the platform does not need to expose public `EditorEventBus` / `EditorEventListener` types; in that case only the semantics in Section 10 are required.
+> If the event system uses platform-native `event` / delegate / stream / signal APIs, the platform does not need to expose public `EditorEventBus` / `EditorEventListener` types; in that case only the semantics in Section 11 are required.
 
 ### 2.2 Field / Property Names (MUST)
 
@@ -227,6 +236,7 @@ controller.applyTheme(EditorTheme.dark());
 | Fling tick | `tickFling()` | — |
 | Animation tick | `tickAnimations()` | — |
 | Handle key event | `handleKeyEvent(...)` | — |
+| Set key map | `setKeyMap(keyMap)` | — |
 | **Text Editing** | | |
 | Insert text | `insertText(text)` | — |
 | Replace text | `replaceText(range, text)` | — |
@@ -347,6 +357,8 @@ controller.applyTheme(EditorTheme.dark());
 | Get theme | `getTheme()` | property: `theme` / `Theme { get; }` |
 | **Configuration** | | |
 | Get settings | `getSettings()` | property: `settings` / `Settings { get; }` |
+| Get key map *(SHOULD)* | `getKeyMap()` | property: `keyMap` / `KeyMap { get; }` |
+| Set key map | `setKeyMap(keyMap)` | — |
 | Icon provider | `setEditorIconProvider(provider)` | — |
 | **Text Editing** | | |
 | Insert text | `insertText(text)` | — |
@@ -447,9 +459,9 @@ controller.applyTheme(EditorTheme.dark());
 
 > Clipboard methods (`copyToClipboard`, `pasteFromClipboard`, `cutToClipboard`) are **MAY** because clipboard access is platform-specific.
 
-> Event exposure does not require a uniform method shape. Platforms MUST provide a type-safe event mechanism per Section 10, and may use `subscribe` / `unsubscribe`, platform-native `event` / delegates, typed `Stream` getters, signals / observers, or equivalent forms.
+> Event exposure does not require a uniform method shape. Platforms MUST provide a type-safe event mechanism per Section 11, and may use `subscribe` / `unsubscribe`, platform-native `event` / delegates, typed `Stream` getters, signals / observers, or equivalent forms.
 
-> Section 3.2 is the widget-entry public API index. Some module-specific interfaces, data models, and callback contracts are further specified in later sections (for example Sections 4, 5, 6, and 7); Sections 4 and 5 define required-module contracts, while Sections 6 and 7 define optional or conditional module contracts.
+> Section 3.2 is the widget-entry public API index. Some module-specific interfaces, data models, and callback contracts are further specified in later sections (for example Sections 4, 5, 6, 7, and 10); Sections 4, 5, and 10 define required-module contracts, while Sections 6 and 7 define optional or conditional module contracts.
 
 ---
 
@@ -961,9 +973,43 @@ All platforms MUST expose the following settings through getter/setter pairs (or
 
 ---
 
-## 10. Event System (MUST)
+## 10. Keymap / Shortcut Mapping (MUST)
 
-### 10.1 Event Mechanism
+### 10.1 Core Data Model
+
+All platforms MUST provide the core-layer keymap types `KeyMap`, `KeyBinding`, `KeyChord`, `KeyCode`, `KeyModifier`, and `EditorCommand`.
+
+- `KeyMap` MUST be a pure data mapping from `KeyBinding` to command id
+- `KeyBinding` MUST support both single-chord and two-chord bindings
+- `KeyChord` MUST represent one key press as `modifiers + keyCode`
+- Single-chord bindings MUST encode the second chord as an empty / none chord
+- `EditorCore.setKeyMap(keyMap)` MUST sync the full binding table to the C++ core
+
+### 10.2 Numeric Alignment
+
+If the platform exposes `KeyCode`, `KeyModifier`, or built-in `EditorCommand` constants, their numeric values MUST align with the C++ core.
+
+- `KeyModifier` MUST use bit flags so combined modifiers can be represented by bitwise OR
+- `KeyCode.NONE`, the empty second chord, and `EditorCommand.NONE` MUST preserve the same semantics as the C++ core
+
+### 10.3 Widget-Layer Extension
+
+- `SweetEditor` MUST support `setKeyMap(keyMap)` and SHOULD expose `getKeyMap()`
+- Platforms MUST expose `EditorKeyMap` as a widget-layer extension of `KeyMap` so host code can additionally bind command ids to host-side handlers
+- `EditorKeyMap` MUST support both `registerCommand(commandId, binding, handler)` and `registerCommand(binding, handler)`
+- Auto-assigned custom command ids MUST be greater than `BUILT_IN_MAX`
+- Platforms MUST provide `defaultKeyMap()` as the default binding factory
+- Platforms MUST provide `vscode()`, and `defaultKeyMap()` MUST be semantically equivalent to `vscode()`
+- Platforms SHOULD provide named preset factories such as `jetbrains()` and `sublime()`
+- `SweetEditor.setKeyMap()` MUST replace the current keymap and make the new bindings immediately effective
+- Widget-layer handlers remain platform-side and are not serialized to the C++ core
+- If a platform does not expose `getKeyMap()`, its documentation MUST clearly describe how host code constructs and replaces the active keymap
+
+---
+
+## 11. Event System (MUST)
+
+### 11.1 Event Mechanism
 
 All platforms MUST provide a **type-safe** editor event exposure mechanism so host code can observe specific event types and manage subscription lifecycle through unsubscribe / dispose / cancel-listening or an equivalent operation.
 
@@ -974,7 +1020,7 @@ Platforms MAY use any of the following forms:
 
 If a platform adopts an explicit event-bus/listener pattern, the related public types SHOULD be named `EditorEventBus` / `EditorEventListener`.
 
-### 10.2 Required Event Types
+### 11.2 Required Event Types
 
 All platforms MUST support the following event types:
 
@@ -995,9 +1041,9 @@ Platform-specific events (e.g. `SelectionMenuItemClickEvent` on mobile) MAY be a
 
 ---
 
-## 11. Enumeration Values (MUST)
+## 12. Enumeration and Constant Values (MUST)
 
-Enum values MUST match the C++ core definitions. The following enums MUST have identical members and ordinal values across all platforms:
+Enum and enum-like constant values MUST match the C++ core definitions. The following groups MUST have identical members and numeric values across all platforms:
 
 | Enum | Values |
 |---|---|
@@ -1015,12 +1061,15 @@ Enum values MUST match the C++ core definitions. The following enums MUST have i
 | `GuideDirection` | (platform-aligned with C++ core) |
 | `GuideStyle` | SOLID=0, DASHED=1 |
 | `SeparatorStyle` | SOLID=0, DASHED=1 |
+| `KeyCode` | NONE=0, BACKSPACE=8, TAB=9, ENTER=13, ESCAPE=27, DELETE_KEY=46, LEFT=37, UP=38, RIGHT=39, DOWN=40, HOME=36, END=35, PAGE_UP=33, PAGE_DOWN=34, A=65, C=67, D=68, V=86, X=88, Y=89, Z=90, K=75, SPACE=32 |
+| `KeyModifier` | NONE=0, SHIFT=1, CTRL=2, ALT=4, META=8 |
+| `EditorCommand` | NONE=0, CURSOR_LEFT=1, CURSOR_RIGHT=2, CURSOR_UP=3, CURSOR_DOWN=4, CURSOR_LINE_START=5, CURSOR_LINE_END=6, CURSOR_PAGE_UP=7, CURSOR_PAGE_DOWN=8, SELECT_LEFT=9, SELECT_RIGHT=10, SELECT_UP=11, SELECT_DOWN=12, SELECT_LINE_START=13, SELECT_LINE_END=14, SELECT_PAGE_UP=15, SELECT_PAGE_DOWN=16, SELECT_ALL=17, BACKSPACE=18, DELETE_FORWARD=19, INSERT_TAB=20, INSERT_NEWLINE=21, INSERT_LINE_ABOVE=22, INSERT_LINE_BELOW=23, UNDO=24, REDO=25, MOVE_LINE_UP=26, MOVE_LINE_DOWN=27, COPY_LINE_UP=28, COPY_LINE_DOWN=29, DELETE_LINE=30, COPY=31, PASTE=32, CUT=33, TRIGGER_COMPLETION=34 |
 
 ---
 
-## 12. Platform-Specific Allowances
+## 13. Platform-Specific Allowances
 
-### 12.1 Bridge Layer (MAY differ)
+### 13.1 Bridge Layer (MAY differ)
 
 Each platform uses its own native bridge technology. This is expected and not constrained:
 
@@ -1033,7 +1082,7 @@ Each platform uses its own native bridge technology. This is expected and not co
 | OHOS | NAPI (`napi_editor.hpp`) |
 | Flutter | FFI (Dart) |
 
-### 12.2 Input Method Handling (MAY differ)
+### 13.2 Input Method Handling (MAY differ)
 
 IME integration is inherently platform-specific:
 
@@ -1046,7 +1095,7 @@ IME integration is inherently platform-specific:
 | WinForms | `ImmAssociateContext` / TSF |
 | OHOS | IME Kit |
 
-### 12.3 Optional Modules
+### 13.3 Optional Modules
 
 | Module | Mobile | Desktop |
 |---|---|---|
@@ -1054,7 +1103,7 @@ IME integration is inherently platform-specific:
 | `selection/` (SelectionMenu) | SHOULD | MAY omit |
 | `perf/` (PerfOverlay) | SHOULD | SHOULD |
 
-### 12.4 Rendering Details (MAY differ)
+### 13.4 Rendering Details (MAY differ)
 
 Minor visual differences are acceptable:
 - Line number background rendering mode
@@ -1065,7 +1114,7 @@ Minor visual differences are acceptable:
 
 ---
 
-## 13. Threading and Concurrency Model (MUST)
+## 14. Threading and Concurrency Model (MUST)
 
 State-mutating editor operations and host-visible callbacks are UI-thread-affine by default. Platforms MAY expose additional thread-safe query surfaces, but MUST choose a concrete threading model and document it explicitly.
 
@@ -1080,11 +1129,11 @@ State-mutating editor operations and host-visible callbacks are UI-thread-affine
 | `buildRenderModel()` | **MUST** | `buildRenderModel()` MUST observe a stable editor snapshot. Platforms MAY require UI-thread calls or provide a stronger thread-safe snapshot contract, but the returned `EditorRenderModel` SHOULD be treated as immutable and MAY be safely read on the render thread |
 | `NewLineActionProvider` | **MUST** | `provideNewLineAction()` MUST complete synchronously on the input path so Enter handling does not depend on a later async callback |
 | Thread safety annotations | **SHOULD** | Platforms SHOULD annotate thread constraints in public API documentation (e.g. Java `@MainThread`, Swift `@MainActor`) |
-## 14. Error Handling (MUST)
+## 15. Error Handling (MUST)
 
 Public APIs adopt defensive handling for invalid inputs without throwing exceptions; exceptions in Provider callbacks are isolated by the Manager.
 
-### 14.1 Public API Parameter Validation
+### 15.1 Public API Parameter Validation
 
 | Scenario | Constraint | Behavior |
 |---|---|---|
@@ -1093,7 +1142,7 @@ Public APIs adopt defensive handling for invalid inputs without throwing excepti
 | Invalid enum values | **MUST** | Use default value (e.g. `WrapMode.NONE`); MUST NOT throw exceptions |
 | Calls when widget not mounted | **SHOULD** | Getters return null or default values; imperative methods SHOULD queue or silently ignore (consistent with Section 3.0.3) |
 
-### 14.2 Provider Exception Handling
+### 15.2 Provider Exception Handling
 
 | Rule | Constraint | Description |
 |---|---|---|
@@ -1101,7 +1150,7 @@ Public APIs adopt defensive handling for invalid inputs without throwing excepti
 | Exception logging | **MAY** | Platforms MAY log caught exceptions; the standard does not require any specific log format or fields such as Provider class name |
 | Post-exception behavior | **SHOULD** | The failing Provider's result for this cycle SHOULD be discarded; subsequent refresh cycles SHOULD continue calling the Provider (no automatic disabling) |
 
-### 14.3 C++ Core Error Propagation
+### 15.3 C++ Core Error Propagation
 
 | Rule | Constraint | Description |
 |---|---|---|
@@ -1110,11 +1159,11 @@ Public APIs adopt defensive handling for invalid inputs without throwing excepti
 
 ---
 
-## 15. Lifecycle Management (MUST)
+## 16. Lifecycle Management (MUST)
 
 Resource creation and destruction follow explicit ordering constraints to prevent dangling references and memory leaks.
 
-### 15.1 `EditorCore` Lifecycle
+### 16.1 `EditorCore` Lifecycle
 
 | Phase | Constraint | Rule |
 |---|---|---|
@@ -1123,7 +1172,7 @@ Resource creation and destruction follow explicit ordering constraints to preven
 | Post-release calls | **MUST** | After `EditorCore` resources are released, any method call MUST be a no-op or throw an explicit "already destroyed" exception; MUST NOT access freed C++ memory |
 | Repeated release | **MUST** | Multiple invocations of the release logic MUST be idempotent (no-op); MUST NOT cause double-free |
 
-### 15.2 Provider Lifecycle
+### 16.2 Provider Lifecycle
 
 | Rule | Constraint | Description |
 |---|---|---|
@@ -1131,7 +1180,7 @@ Resource creation and destruction follow explicit ordering constraints to preven
 | Cleanup during release | **MUST** | During the platform-defined editor release / dispose / close / teardown phase, MUST automatically unregister all registered Providers and cancel or mark stale all in-flight async requests so late results are ignored |
 | Provider references | **SHOULD** | Platform implementations SHOULD avoid Providers holding strong references to the widget instance to prevent circular references causing memory leaks (Java/Kotlin: WeakReference; Swift: weak/unowned; Dart: no special handling needed) |
 
-### 15.3 `SweetEditorController` Lifecycle (Declarative Frameworks)
+### 16.3 `SweetEditorController` Lifecycle (Declarative Frameworks)
 
 | Phase | Constraint | Rule |
 |---|---|---|
@@ -1140,7 +1189,7 @@ Resource creation and destruction follow explicit ordering constraints to preven
 | `dispose()` ordering | **MUST** | `dispose()` MUST first unbind the widget (if still bound), then release internal resources; any method call after `dispose()` MUST be a no-op |
 | Widget rebuild | **SHOULD** | In declarative frameworks, widgets may be rebuilt due to state changes; the Controller SHOULD seamlessly `bind()` to the new widget after the old one calls `unbind()`, without losing queued operations |
 
-### 15.4 Resource Release Order
+### 16.4 Resource Release Order
 
 When the platform performs editor release / dispose / close / final teardown, subsystems MUST be released in the following order:
 
@@ -1156,11 +1205,11 @@ When the platform performs editor release / dispose / close / final teardown, su
 
 ---
 
-## 16. Data Model Field Definitions (MUST)
+## 17. Data Model Field Definitions (MUST)
 
 The Core layer defines numerous decoration data types. All platforms MUST implement identical fields. This section specifies the MUST fields, construction constraints, and immutability requirements for each data type.
 
-### 16.1 General Constraints
+### 17.1 General Constraints
 
 | Rule | Constraint | Description |
 |---|---|---|
@@ -1169,7 +1218,7 @@ The Core layer defines numerous decoration data types. All platforms MUST implem
 | Field names | **MUST** | Field names MUST follow the cross-platform naming rules in Section 2.2 |
 | Coordinate basis | **MUST** | All line numbers (`line`) and column numbers (`column`) MUST be 0-based; columns are measured in UTF-16 character offsets |
 
-### 16.2 Adornment Data Types
+### 17.2 Adornment Data Types
 
 **`StyleSpan`** — Inline highlight range
 
@@ -1260,11 +1309,11 @@ The Core layer defines numerous decoration data types. All platforms MUST implem
 
 ---
 
-## 17. Document Specification (MUST)
+## 18. Document Specification (MUST)
 
 `Document` is the core data type of the editor, wrapping the C++ side document handle.
 
-### 17.1 Construction Methods
+### 18.1 Construction Methods
 
 All platforms MUST support at least the following two construction methods:
 
@@ -1275,7 +1324,7 @@ All platforms MUST support at least the following two construction methods:
 
 > Constructor parameter naming and types MAY vary by platform (e.g. Java `File`, C# `string path`, Swift `URL`), but semantics MUST be consistent.
 
-### 17.2 Public Methods
+### 18.2 Public Methods
 
 | Method | Constraint | Description |
 |---|---|---|
@@ -1283,7 +1332,7 @@ All platforms MUST support at least the following two construction methods:
 | `getLineText(line)` | **MUST** | Returns the text content of the specified line (excluding line ending) |
 | `getText()` | **SHOULD** | Returns the complete document text |
 
-### 17.3 Internal Implementation
+### 18.3 Internal Implementation
 
 | Rule | Constraint | Description |
 |---|---|---|
@@ -1292,16 +1341,16 @@ All platforms MUST support at least the following two construction methods:
 | Encoding model | **MUST** | Platform layers MUST NOT assume or expose a specific internal storage / layout encoding beyond the semantics guaranteed by the public APIs |
 | Line endings | **MUST** | C++ Core supports LF, CR, and CRLF line endings; text returned by `getLineText()` MUST NOT include line endings |
 
-### 17.4 Relationship with `loadDocument()`
+### 18.4 Relationship with `loadDocument()`
 
 | Rule | Constraint | Description |
 |---|---|---|
 | Loading timing | **MUST** | After creation, `Document` MUST be loaded into the editor via `loadDocument(doc)`; an unloaded `Document` will not trigger any rendering or events |
 | Document replacement | **MUST** | Calling `loadDocument()` again replaces the current document; the old document reference is managed by host code |
 | Document ownership | **SHOULD** | The same `Document` instance SHOULD NOT be loaded into multiple editor instances simultaneously |
-## 18. `EditorMetadata` and `LanguageConfiguration` Field Definitions (MUST)
+## 19. `EditorMetadata` and `LanguageConfiguration` Field Definitions (MUST)
 
-### 18.1 `EditorMetadata`
+### 19.1 `EditorMetadata`
 
 `EditorMetadata` is a **semantic concept type** representing host-defined metadata attached to an editor instance. The platform layer is responsible only for storing and returning it, not interpreting its internal structure.
 
@@ -1312,7 +1361,7 @@ All platforms MUST support at least the following two construction methods:
 | Purpose | **MUST** | Host code stores and retrieves custom metadata (e.g. file path, language ID) via `setMetadata()` / `getMetadata()`; the platform layer MUST treat it as an opaque value and MUST NOT impose its own schema |
 | Retrieval semantics | **MUST** | `getMetadata()` MUST return the same metadata value previously set, or `null` if none exists; if the platform exposes a wider carrier type (such as `Object?`), host code is responsible for its own casts / type assertions |
 
-### 18.2 `LanguageConfiguration`
+### 19.2 `LanguageConfiguration`
 
 `LanguageConfiguration` describes metadata for a specific programming language.
 
@@ -1336,11 +1385,11 @@ All platforms MUST support at least the following two construction methods:
 | Construction | **SHOULD** | SHOULD provide Builder pattern construction (Java/Kotlin/ArkTS/Dart); MAY use direct constructors (Swift/C#) |
 | Immutability | **SHOULD** | SHOULD be immutable after construction |
 | Runtime effect | **MUST** | When `setLanguageConfiguration()` is called, bracket matching and auto-closing behavior visible to the editor MUST be updated consistently with the new configuration |
-## 19. Performance Guidance & Reference Targets (SHOULD)
+## 20. Performance Guidance & Reference Targets (SHOULD)
 
 Based on the `perf/` module (`PerfOverlay`, `PerfStepRecorder`, `MeasurePerfStats`) and the C++ Core `PERF_TIMER` macros, this section defines cross-platform performance guidance and reference targets rather than hard conformance gates.
 
-### 19.1 Runtime Performance Invariants
+### 20.1 Runtime Performance Invariants
 
 | Rule | Constraint Level | Description |
 |---|---|---|
@@ -1350,7 +1399,7 @@ Based on the `perf/` module (`PerfOverlay`, `PerfStepRecorder`, `MeasurePerfStat
 | Core/layout duplication | **MUST** | Platform hot paths MUST NOT redundantly recompute geometry or layout information that is already produced by Core and can be consumed directly |
 | Performance diagnostics | **SHOULD** | Platforms SHOULD preserve enough timing hooks to support PerfOverlay or equivalent debug-only performance diagnostics |
 
-### 19.2 Reference Targets
+### 20.2 Reference Targets
 
 The following numbers are reference targets for release builds on representative hardware. They are optimization goals, not conformance gates.
 
@@ -1363,7 +1412,7 @@ The following numbers are reference targets for release builds on representative
 | Single render step | **SHOULD** | <= 2ms | Exceeding 2ms is marked with `!` in PerfOverlay (consistent with `WARN_PAINT_STEP_MS`) |
 | Input path latency | **SHOULD** | <= 3ms | Time from gesture/keyboard event to Core processing completion (consistent with `WARN_INPUT_MS`) |
 
-### 19.3 Large Document Performance Guidance
+### 20.3 Large Document Performance Guidance
 
 | Scenario | Constraint Level | Guidance |
 |---|---|---|
@@ -1371,7 +1420,7 @@ The following numbers are reference targets for release builds on representative
 | 100K-line document scrolling | **SHOULD** | Rely on viewport rendering (only layout and draw visible lines); scroll frame rate target is >= 30fps on reference hardware |
 | Memory usage | **SHOULD** | Platform-layer memory usage target for a 100K-line document is <= 50MB (excluding C++ Core document storage) |
 
-### 19.4 Provider Timeout Guidance
+### 20.4 Provider Timeout Guidance
 
 | Rule | Constraint Level | Description |
 |---|---|---|
@@ -1379,7 +1428,7 @@ The following numbers are reference targets for release builds on representative
 | `CompletionProvider` timeout | **SHOULD** | If no completion result is delivered within 3 seconds, the Manager SHOULD cancel or mark the request stale |
 | `NewLineActionProvider` latency | **MUST/SHOULD** | `provideNewLineAction()` MUST stay synchronous on the input path and SHOULD complete within a sub-millisecond to 1ms budget on reference hardware; it MUST NOT introduce user-perceptible Enter-key latency |
 
-### 19.5 `PerfOverlay` Debug Panel (SHOULD)
+### 20.5 `PerfOverlay` Debug Panel (SHOULD)
 
 | Rule | Constraint Level | Description |
 |---|---|---|
@@ -1388,9 +1437,9 @@ The following numbers are reference targets for release builds on representative
 | Display position | **SHOULD** | When enabled, SHOULD display a semi-transparent performance panel at the top-left of the editor area |
 | Display content | **SHOULD** | SHOULD include at minimum: FPS, per-frame total/build/draw latency, text measurement statistics |
 | Stability | **MUST** | PerfOverlay field names, thresholds, and step names are for debug display and MUST NOT be treated as a stable API contract |
-## 20. Testing Standards (SHOULD)
+## 21. Testing Standards (SHOULD)
 
-### 20.1 C++ Core Tests
+### 21.1 C++ Core Tests
 
 | Rule | Constraint Level | Description |
 |---|---|---|
@@ -1399,7 +1448,7 @@ The following numbers are reference targets for release builds on representative
 | Performance baselines | **SHOULD** | SHOULD use Catch2 `BENCHMARK` macros to establish performance baseline tests (e.g., `performance_baseline.cpp`) |
 | Coverage scope | **SHOULD** | SHOULD cover: text editing operations, cursor/selection, undo/redo, IME composition input, decoration offset adjustment, layout mapping, scroll metrics |
 
-### 20.2 Platform-Layer Tests
+### 21.2 Platform-Layer Tests
 
 | Rule | Constraint Level | Description |
 |---|---|---|
@@ -1407,7 +1456,7 @@ The following numbers are reference targets for release builds on representative
 | Integration tests | **MAY** | MAY provide widget-level integration tests (e.g., create widget → load document → verify line count) |
 | Test framework | **SHOULD** | Use the platform's idiomatic test framework (Android: JUnit/Espresso, Apple: XCTest, C#: xUnit/NUnit, OHOS: Hypium) |
 
-### 20.3 Cross-Platform Consistency Verification
+### 21.3 Cross-Platform Consistency Verification
 
 | Rule | Constraint Level | Description |
 |---|---|---|
@@ -1417,11 +1466,11 @@ The following numbers are reference targets for release builds on representative
 
 ---
 
-## 21. Accessibility Standards (MAY)
+## 22. Accessibility Standards (MAY)
 
 Accessibility support is at the MAY level, but implementations SHOULD follow the guidance below.
 
-### 21.1 Basic Accessibility Properties
+### 22.1 Basic Accessibility Properties
 
 | Rule | Constraint Level | Description |
 |---|---|---|
@@ -1430,7 +1479,7 @@ Accessibility support is at the MAY level, but implementations SHOULD follow the
 | Cursor position | **SHOULD** | SHOULD expose current cursor position and selection range to accessibility services |
 | Line information | **MAY** | MAY expose current line number and total line count to accessibility services |
 
-### 21.2 Keyboard Navigation
+### 22.2 Keyboard Navigation
 
 | Rule | Constraint Level | Description |
 |---|---|---|
@@ -1438,7 +1487,7 @@ Accessibility support is at the MAY level, but implementations SHOULD follow the
 | Keyboard shortcuts | **SHOULD** | Desktop platforms SHOULD support standard keyboard shortcuts (Ctrl/Cmd+C/V/X/Z/A, etc.) |
 | Screen reader compatibility | **MAY** | MAY support screen reader text narration (VoiceOver, TalkBack, Narrator) |
 
-### 21.3 Visual Aids
+### 22.3 Visual Aids
 
 | Rule | Constraint Level | Description |
 |---|---|---|
@@ -1448,11 +1497,11 @@ Accessibility support is at the MAY level, but implementations SHOULD follow the
 
 ---
 
-## 22. Versioning
+## 23. Versioning
 
 This standard applies to SweetEditor platform implementations as of 2026-03. When the C++ core adds new enums, events, or API methods, all platforms MUST be updated to match within the same release cycle.
 
-### 22.1 Platform Package Version Numbering
+### 23.1 Platform Package Version Numbering
 
 Platform package version numbers MUST maintain alignment with the C++ Core version. The version format is `a.b.c` (major.minor.patch).
 
