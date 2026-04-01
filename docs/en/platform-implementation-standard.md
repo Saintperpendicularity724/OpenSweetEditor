@@ -1003,7 +1003,7 @@ Enum values MUST match the C++ core definitions. The following enums MUST have i
 |---|---|
 | `WrapMode` | NONE=0, CHAR_BREAK=1, WORD_BREAK=2 |
 | `FoldArrowMode` | MOUSE_OVER=0, ALWAYS=1 |
-| `AutoIndentMode` | NONE=0, KEEP=1, SMART=2 |
+| `AutoIndentMode` | NONE=0, KEEP=1 |
 | `CurrentLineRenderMode` | NONE=0, LINE=1, GUTTER=2 |
 | `ScrollBehavior` | SMOOTH=0, INSTANT=1 |
 | `SpanLayer` | SYNTAX=0, SEMANTIC=1 |
